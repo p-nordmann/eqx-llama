@@ -1,0 +1,44 @@
+{
+    "name": "eqx-llama",
+    "dockerFile": "Dockerfile",
+    "postCreateCommand": "echo 'Nothing to do here'",
+    "runArgs": [
+        "--network=host",
+        "--gpus=all"
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.black-formatter",
+                "ms-python.isort",
+                "tamasfe.even-better-toml"
+            ],
+            "settings": {
+                "python.formatting.provider": "black",
+                "[python]": {
+                    "editor.formatOnSave": true,
+                    "editor.codeActionsOnSave": {
+                        "source.organizeImports": true
+                    }
+                },
+                "files.exclude": {
+                    "**/.git": true,
+                    "**/.svn": true,
+                    "**/.hg": true,
+                    "**/CVS": true,
+                    "**/.DS_Store": true,
+                    "**/Thumbs.db": true,
+                    "**/*.egg-info": true,
+                    "**/.pytest_cache": true,
+                    "**/__pycache__": true
+                },
+                "python.autoComplete.extraPaths": [
+                    "/opt/flax",
+                    "/opt/jax",
+                    "/opt/jax-triton"
+                ]
+            }
+        }
+    }
+}
