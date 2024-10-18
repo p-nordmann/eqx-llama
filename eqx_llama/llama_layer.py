@@ -3,13 +3,13 @@ import jax
 from beartype import beartype
 from jaxtyping import Array, Float32, PRNGKeyArray, jaxtyped
 
-from .llama_attention import LegacyAttentionModule
+from .llama_attention import AttentionModule
 from .llama_config import LLaMAConfig
 from .llama_feed_forward import FeedForwardModule
 
 
 class LLaMALayer(eqx.Module):
-    attention_module: LegacyAttentionModule
+    attention_module: AttentionModule
     feed_forward_module: FeedForwardModule
 
     def __init__(
@@ -19,7 +19,7 @@ class LLaMALayer(eqx.Module):
         key: PRNGKeyArray,
     ):
         key_attention, key = jax.random.split(key)
-        self.attention_module = LegacyAttentionModule(
+        self.attention_module = AttentionModule(
             config,
             key=key_attention,
         )

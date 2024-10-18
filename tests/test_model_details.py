@@ -1,7 +1,10 @@
 import jax
 import jax.numpy as jnp
 
-from eqx_llama.llama_attention import apply_rotary_embeddings, compute_self_attention
+from eqx_llama.llama_legacy_attention import (
+    apply_rotary_embeddings,
+    compute_self_attention,
+)
 from eqx_llama.normalization import RMSLayerNorm
 
 
