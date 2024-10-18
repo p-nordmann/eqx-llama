@@ -79,7 +79,7 @@ def compute_self_attention(
     return scores @ vs
 
 
-class AttentionModule(eqx.Module):
+class LegacyAttentionModule(eqx.Module):
     norm: RMSLayerNorm
     linear_q: eqx.nn.Linear
     linear_k: eqx.nn.Linear
