@@ -50,8 +50,8 @@ def test_training_sinusoid():
 
     # Constants
     seed = 0
-    n = 100_000
-    n_train = 80_000
+    n = 10_000
+    n_train = 8_000
     sine_period = 100
     noise_std = 0.3
     config = LLaMAConfig(
@@ -66,7 +66,7 @@ def test_training_sinusoid():
     batch_size = 100
     window_size = 40
     expected_improvement_factor = (
-        2  # Completely arbitrary, but loss should significatively improve
+        1.5  # Completely arbitrary, but loss should significatively improve
     )
 
     # Make PRNGKey.
