@@ -1,3 +1,5 @@
+from typing import Literal
+
 import equinox as eqx
 import jax
 from beartype import beartype
@@ -18,6 +20,7 @@ class LLaMA(eqx.Module):
         config: LLaMAConfig,
         *,
         key: PRNGKeyArray,
+        attn_implementation: Literal["xla", "cudnn"] = "xla",
     ):
         key_embeddings, key = jax.random.split(key)
         self.embeddings = eqx.nn.Embedding(
@@ -33,6 +36,7 @@ class LLaMA(eqx.Module):
                 LLaMALayer(
                     config,
                     key=key_layer,
+                    attn_implementation=attn_implementation,
                 )
             )
 

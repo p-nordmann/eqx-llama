@@ -1,3 +1,5 @@
+from typing import Literal
+
 import equinox as eqx
 import jax
 from beartype import beartype
@@ -17,11 +19,13 @@ class LLaMALayer(eqx.Module):
         config: LLaMAConfig,
         *,
         key: PRNGKeyArray,
+        attn_implementation: Literal["xla", "cudnn"] = "xla",
     ):
         key_attention, key = jax.random.split(key)
         self.attention_module = AttentionModule(
             config,
             key=key_attention,
+            attn_implementation=attn_implementation,
         )
 
         key_feedforward, key = jax.random.split(key)

@@ -1,3 +1,5 @@
+from typing import Literal
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -18,12 +20,14 @@ class AttentionModule(eqx.Module):
 
     num_attention_heads: int = eqx.field(static=True)
     size_attention_heads: int = eqx.field(static=True)
+    attn_implementation: Literal["xla", "cudnn"] = eqx.field(static=True)
 
     def __init__(
         self,
         config: LLaMAConfig,
         *,
         key: PRNGKeyArray,
+        attn_implementation: Literal["xla", "cudnn"] = "xla",
     ):
         assert (
             config.num_attention_heads * config.size_attention_heads
@@ -31,6 +35,7 @@ class AttentionModule(eqx.Module):
         )
         self.num_attention_heads = config.num_attention_heads
         self.size_attention_heads = config.size_attention_heads
+        self.attn_implementation = attn_implementation
 
         self.norm = RMSLayerNorm(config.size_layer)
 
@@ -104,7 +109,9 @@ class AttentionModule(eqx.Module):
             use_position_embeddings=True,
         )
         vs = self._compute_embeddings(xs_normalized, self.linear_v)
-        attention_out = compute_self_attention(qs, ks, vs)
+        attention_out = compute_self_attention(
+            qs, ks, vs, attn_implementation=self.attn_implementation
+        )
         return jax.vmap(self.linear_o)(jax.lax.collapse(attention_out, 1, 3))
 
 
@@ -112,7 +119,9 @@ def compute_self_attention(
     qs: Float32[Array, " seqlen num_heads head_dim"],
     ks: Float32[Array, " seqlen num_heads head_dim"],
     vs: Float32[Array, " seqlen num_heads head_dim"],
+    *,
+    attn_implementation: Literal["xla", "cudnn"] = "xla",
 ) -> Float32[Array, " seqlen num_heads head_dim"]:
     return jax.nn.dot_product_attention(
-        qs, ks, vs, is_causal=True, implementation="xla"
+        qs, ks, vs, is_causal=True, implementation=attn_implementation
     )
