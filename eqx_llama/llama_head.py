@@ -1,5 +1,3 @@
-from typing import Optional
-
 import equinox as eqx
 import jax
 from jaxtyping import Array, Float, PRNGKeyArray

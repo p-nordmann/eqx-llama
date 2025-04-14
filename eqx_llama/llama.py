@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal
 
 import equinox as eqx
 import jax
@@ -48,8 +48,6 @@ class LLaMA(eqx.Module):
     def __call__(
         self,
         tokens: Integer[Array, " seq_len"],
-        enable_dropout: bool = False,
-        key: Optional[PRNGKeyArray] = None,
     ) -> Float[Array, " seq_len size_vocab"]:
         xs = jax.vmap(self.embeddings)(tokens)
 
