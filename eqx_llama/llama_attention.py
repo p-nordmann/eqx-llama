@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 import equinox as eqx
 import jax
@@ -84,7 +84,7 @@ class AttentionModule(eqx.Module):
         projected_xs = jax.vmap(linear)(xs)
         hs = jnp.reshape(
             projected_xs,
-            newshape=(-1, self.num_attention_heads, self.size_attention_heads),
+            shape=(-1, self.num_attention_heads, self.size_attention_heads),
         )
         if not use_position_embeddings:
             return hs
@@ -95,7 +95,7 @@ class AttentionModule(eqx.Module):
         self,
         xs: Float32[Array, " seq_len size_layer"],
         enable_dropout: bool = False,
-        key: PRNGKeyArray | None = None,
+        key: Optional[PRNGKeyArray] = None,
     ) -> Float32[Array, " seq_len size_layer"]:
         xs_normalized = jax.vmap(self.norm)(xs)
         qs = self._compute_embeddings(

@@ -1,3 +1,5 @@
+from typing import Optional
+
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -30,7 +32,7 @@ def generalized_rotary_kernel(x, m, thetas):
     """
     pairs_of_xi = jnp.reshape(
         x,
-        newshape=(-1, 2),
+        shape=(-1, 2),
         order="C",  # Order is critical to be consistent with the original LLaMAs!
     )
     pairs_of_embeddings = jax.vmap(rotary_kernel)(pairs_of_xi, m * thetas)
@@ -145,7 +147,7 @@ class LegacyAttentionModule(eqx.Module):
         projected_xs = jax.vmap(linear)(xs)
         hs = jnp.reshape(
             projected_xs,
-            newshape=(-1, self.num_attention_heads, self.size_attention_heads),
+            shape=(-1, self.num_attention_heads, self.size_attention_heads),
         )
         if not use_position_embeddings:
             return hs
@@ -156,7 +158,7 @@ class LegacyAttentionModule(eqx.Module):
         self,
         xs: Float32[Array, " seq_len size_layer"],
         enable_dropout: bool = False,
-        key: PRNGKeyArray | None = None,
+        key: Optional[PRNGKeyArray] = None,
     ) -> Float32[Array, " seq_len size_layer"]:
         xs_normalized = jax.vmap(self.norm)(xs)
         qs = self._compute_embeddings(

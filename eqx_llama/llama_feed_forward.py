@@ -1,3 +1,5 @@
+from typing import Optional
+
 import equinox as eqx
 import jax
 from beartype import beartype
@@ -50,7 +52,7 @@ class FeedForwardModule(eqx.Module):
         self,
         xs: Float32[Array, " seq_len size_layer"],
         enable_dropout: bool = False,
-        key: PRNGKeyArray | None = None,
+        key: Optional[PRNGKeyArray] = None,
     ) -> Float32[Array, " seq_len size_layer"]:
         xs_normalized = jax.vmap(self.norm)(xs)
         hidden_1 = jax.vmap(self.linear_in_1)(xs_normalized)

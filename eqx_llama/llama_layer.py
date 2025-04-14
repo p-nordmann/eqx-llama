@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 import equinox as eqx
 import jax
@@ -39,7 +39,7 @@ class LLaMALayer(eqx.Module):
         self,
         xs: Float32[Array, " seq_len size_layer"],
         enable_dropout: bool = False,
-        key: PRNGKeyArray | None = None,
+        key: Optional[PRNGKeyArray] = None,
     ) -> Float32[Array, " seq_len size_layer"]:
         xs = xs + self.attention_module(xs)
         xs = xs + self.feed_forward_module(xs)

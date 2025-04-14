@@ -1,3 +1,5 @@
+from typing import Optional
+
 import equinox as eqx
 import jax
 from beartype import beartype
@@ -32,7 +34,7 @@ class LLaMAHead(eqx.Module):
         self,
         x: Float32[Array, " size_layer"],
         enable_dropout: bool = False,
-        key: PRNGKeyArray | None = None,
+        key: Optional[PRNGKeyArray] = None,
     ) -> Float32[Array, " size_vocab"]:
         x_normalized = self.norm(x)
         return self.linear(x_normalized)

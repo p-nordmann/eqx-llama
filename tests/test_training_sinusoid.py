@@ -87,6 +87,7 @@ def test_training_sinusoid():
     model = LLaMA(
         config=config,
         key=key_model,
+        attn_implementation="xla",
     )
 
     # Make optimizer.
@@ -119,7 +120,8 @@ def test_training_sinusoid():
         losses_after.append(loss)
 
     # Check that loss is good.
-    before, after = jnp.mean(jnp.stack(losses_before)), jnp.mean(
-        jnp.stack(losses_after)
+    before, after = (
+        jnp.mean(jnp.stack(losses_before)),
+        jnp.mean(jnp.stack(losses_after)),
     )
     assert before / expected_improvement_factor > after
