@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 import equinox as eqx
 import jax
-from jaxtyping import Array, Float32, Integer, PRNGKeyArray
+from jaxtyping import Array, Float, Integer, PRNGKeyArray
 
 from .llama_config import LLaMAConfig
 from .llama_head import LLaMAHead
@@ -50,7 +50,7 @@ class LLaMA(eqx.Module):
         tokens: Integer[Array, " seq_len"],
         enable_dropout: bool = False,
         key: Optional[PRNGKeyArray] = None,
-    ) -> Float32[Array, " seq_len size_vocab"]:
+    ) -> Float[Array, " seq_len size_vocab"]:
         xs = jax.vmap(self.embeddings)(tokens)
 
         for layer in self.layers:

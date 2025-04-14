@@ -2,7 +2,7 @@ from typing import Optional
 
 import equinox as eqx
 import jax
-from jaxtyping import Array, Float32, PRNGKeyArray
+from jaxtyping import Array, Float, PRNGKeyArray
 
 from .llama_config import LLaMAConfig
 from .normalization import RMSLayerNorm
@@ -30,9 +30,9 @@ class LLaMAHead(eqx.Module):
 
     def __call__(
         self,
-        x: Float32[Array, " size_layer"],
+        x: Float[Array, " size_layer"],
         enable_dropout: bool = False,
         key: Optional[PRNGKeyArray] = None,
-    ) -> Float32[Array, " size_vocab"]:
+    ) -> Float[Array, " size_vocab"]:
         x_normalized = self.norm(x)
         return self.linear(x_normalized)

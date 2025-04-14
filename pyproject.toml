@@ -14,11 +14,7 @@ authors = [{ name = "Pierre-Louis Nordmann" }]
 description = "LLaMA implementation with Jax and Equinox"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = [
-    "equinox>=0.11.10",
-    "jax[cuda12]>=0.5.3",
-    "jaxtyping>=0.2.36",
-]
+dependencies = ["equinox>=0.11.10", "jax[cuda12]>=0.5.3", "jaxtyping>=0.2.36"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -30,3 +26,6 @@ dev = ["optax>=0.2.4", "pytest>=8.3.5"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint]
+ignore = ["F722"]

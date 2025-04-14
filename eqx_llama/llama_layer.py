@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 import equinox as eqx
 import jax
-from jaxtyping import Array, Float32, PRNGKeyArray
+from jaxtyping import Array, Float, PRNGKeyArray
 
 from .llama_attention import AttentionModule
 from .llama_config import LLaMAConfig
@@ -35,10 +35,10 @@ class LLaMALayer(eqx.Module):
 
     def __call__(
         self,
-        xs: Float32[Array, " seq_len size_layer"],
+        xs: Float[Array, " seq_len size_layer"],
         enable_dropout: bool = False,
         key: Optional[PRNGKeyArray] = None,
-    ) -> Float32[Array, " seq_len size_layer"]:
+    ) -> Float[Array, " seq_len size_layer"]:
         xs = xs + self.attention_module(xs)
         xs = xs + self.feed_forward_module(xs)
         return xs

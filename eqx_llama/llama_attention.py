@@ -3,7 +3,7 @@ from typing import Literal, Optional
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from jaxtyping import Array, Float32, PRNGKeyArray
+from jaxtyping import Array, Float, PRNGKeyArray
 
 from .llama_config import LLaMAConfig
 from .normalization import RMSLayerNorm
@@ -76,10 +76,10 @@ class AttentionModule(eqx.Module):
 
     def _compute_embeddings(
         self,
-        xs: Float32[Array, " seq_len size_layer"],
+        xs: Float[Array, " seq_len size_layer"],
         linear: eqx.nn.Linear,
         use_position_embeddings: bool = False,
-    ) -> Float32[Array, " seq_len num_heads size_heads"]:
+    ) -> Float[Array, " seq_len num_heads size_heads"]:
         projected_xs = jax.vmap(linear)(xs)
         hs = jnp.reshape(
             projected_xs,
@@ -91,10 +91,10 @@ class AttentionModule(eqx.Module):
 
     def __call__(
         self,
-        xs: Float32[Array, " seq_len size_layer"],
+        xs: Float[Array, " seq_len size_layer"],
         enable_dropout: bool = False,
         key: Optional[PRNGKeyArray] = None,
-    ) -> Float32[Array, " seq_len size_layer"]:
+    ) -> Float[Array, " seq_len size_layer"]:
         xs_normalized = jax.vmap(self.norm)(xs)
         qs = self._compute_embeddings(
             xs_normalized,
@@ -114,12 +114,12 @@ class AttentionModule(eqx.Module):
 
 
 def compute_self_attention(
-    qs: Float32[Array, " seqlen num_heads head_dim"],
-    ks: Float32[Array, " seqlen num_heads head_dim"],
-    vs: Float32[Array, " seqlen num_heads head_dim"],
+    qs: Float[Array, " seqlen num_heads head_dim"],
+    ks: Float[Array, " seqlen num_heads head_dim"],
+    vs: Float[Array, " seqlen num_heads head_dim"],
     *,
     attn_implementation: Literal["xla", "cudnn"] = "xla",
-) -> Float32[Array, " seqlen num_heads head_dim"]:
+) -> Float[Array, " seqlen num_heads head_dim"]:
     return jax.nn.dot_product_attention(
         qs, ks, vs, is_causal=True, implementation=attn_implementation
     )

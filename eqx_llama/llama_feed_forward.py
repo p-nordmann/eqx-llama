@@ -2,7 +2,7 @@ from typing import Optional
 
 import equinox as eqx
 import jax
-from jaxtyping import Array, Float32, PRNGKeyArray
+from jaxtyping import Array, Float, PRNGKeyArray
 
 from .llama_config import LLaMAConfig
 from .normalization import RMSLayerNorm
@@ -48,10 +48,10 @@ class FeedForwardModule(eqx.Module):
 
     def __call__(
         self,
-        xs: Float32[Array, " seq_len size_layer"],
+        xs: Float[Array, " seq_len size_layer"],
         enable_dropout: bool = False,
         key: Optional[PRNGKeyArray] = None,
-    ) -> Float32[Array, " seq_len size_layer"]:
+    ) -> Float[Array, " seq_len size_layer"]:
         xs_normalized = jax.vmap(self.norm)(xs)
         hidden_1 = jax.vmap(self.linear_in_1)(xs_normalized)
         hidden_2 = jax.vmap(self.linear_in_2)(xs_normalized)
