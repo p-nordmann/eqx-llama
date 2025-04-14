@@ -3,8 +3,7 @@ from typing import Literal, Optional
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from beartype import beartype
-from jaxtyping import Array, Float32, PRNGKeyArray, jaxtyped
+from jaxtyping import Array, Float32, PRNGKeyArray
 
 from .llama_config import LLaMAConfig
 from .normalization import RMSLayerNorm
@@ -90,7 +89,6 @@ class AttentionModule(eqx.Module):
             return hs
         return jax.vmap(self.rope_embeddings, in_axes=1, out_axes=1)(hs)
 
-    @jaxtyped(typechecker=beartype)
     def __call__(
         self,
         xs: Float32[Array, " seq_len size_layer"],

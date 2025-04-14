@@ -1,8 +1,7 @@
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-from beartype import beartype
-from jaxtyping import Array, Float32, jaxtyped
+from jaxtyping import Array, Float32
 
 
 class RMSLayerNorm(eqx.Module):
@@ -19,7 +18,6 @@ class RMSLayerNorm(eqx.Module):
         self.weight = jnp.ones(shape=(dim,))
         self.eps = eps
 
-    @jaxtyped(typechecker=beartype)
     def __call__(self, x: Float32[Array, " dim"]) -> Float32[Array, " dim"]:
         moment_2 = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
         x_normed = x * jax.lax.rsqrt(moment_2 + self.eps)

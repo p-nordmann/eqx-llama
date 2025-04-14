@@ -2,8 +2,7 @@ from typing import Optional
 
 import equinox as eqx
 import jax
-from beartype import beartype
-from jaxtyping import Array, Float32, PRNGKeyArray, jaxtyped
+from jaxtyping import Array, Float32, PRNGKeyArray
 
 from .llama_config import LLaMAConfig
 from .normalization import RMSLayerNorm
@@ -29,7 +28,6 @@ class LLaMAHead(eqx.Module):
             key=key_linear,
         )
 
-    @jaxtyped(typechecker=beartype)
     def __call__(
         self,
         x: Float32[Array, " size_layer"],

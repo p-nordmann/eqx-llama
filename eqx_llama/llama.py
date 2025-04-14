@@ -2,8 +2,7 @@ from typing import Literal, Optional
 
 import equinox as eqx
 import jax
-from beartype import beartype
-from jaxtyping import Array, Float32, Integer, PRNGKeyArray, jaxtyped
+from jaxtyping import Array, Float32, Integer, PRNGKeyArray
 
 from .llama_config import LLaMAConfig
 from .llama_head import LLaMAHead
@@ -46,7 +45,6 @@ class LLaMA(eqx.Module):
             key=key_head,
         )
 
-    @jaxtyped(typechecker=beartype)
     def __call__(
         self,
         tokens: Integer[Array, " seq_len"],
