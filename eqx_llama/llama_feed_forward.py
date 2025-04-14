@@ -49,8 +49,6 @@ class FeedForwardModule(eqx.Module):
     def __call__(
         self,
         xs: Float[Array, " seq_len size_layer"],
-        enable_dropout: bool = False,
-        key: Optional[PRNGKeyArray] = None,
     ) -> Float[Array, " seq_len size_layer"]:
         xs_normalized = jax.vmap(self.norm)(xs)
         hidden_1 = jax.vmap(self.linear_in_1)(xs_normalized)

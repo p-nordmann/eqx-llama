@@ -92,8 +92,6 @@ class AttentionModule(eqx.Module):
     def __call__(
         self,
         xs: Float[Array, " seq_len size_layer"],
-        enable_dropout: bool = False,
-        key: Optional[PRNGKeyArray] = None,
     ) -> Float[Array, " seq_len size_layer"]:
         xs_normalized = jax.vmap(self.norm)(xs)
         qs = self._compute_embeddings(

@@ -36,8 +36,6 @@ class LLaMALayer(eqx.Module):
     def __call__(
         self,
         xs: Float[Array, " seq_len size_layer"],
-        enable_dropout: bool = False,
-        key: Optional[PRNGKeyArray] = None,
     ) -> Float[Array, " seq_len size_layer"]:
         xs = xs + self.attention_module(xs)
         xs = xs + self.feed_forward_module(xs)
