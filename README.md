@@ -1,2 +1,2 @@
 # eqx-llama
-LLaMA implementation with Jax and Equinox
+LLaMA implementation with Jax and Equinox.
