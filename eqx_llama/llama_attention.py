@@ -103,7 +103,7 @@ class AttentionModule(eqx.Module):
         )
         if not use_position_embeddings:
             return hs
-        return jax.vmap(apply_rotary_embeddings, in_axes=(1, None), out_axes=(1, None))(
+        return jax.vmap(apply_rotary_embeddings, in_axes=(1, None), out_axes=1)(
             hs, start_index
         )
 
@@ -119,7 +119,7 @@ class AttentionModule(eqx.Module):
         old_ks, old_vs = state.get(self.state_index)
         context_len = old_ks.shape[0]
 
-        chex.assert_equal_shape(old_ks, old_vs)
+        chex.assert_equal_shape([old_ks, old_vs])
         chex.assert_axis_dimension(old_ks, 1, self.num_attention_heads)
         chex.assert_axis_dimension(old_ks, 2, self.size_attention_heads)
 
@@ -132,7 +132,7 @@ class AttentionModule(eqx.Module):
         )
         new_vs = self._compute_embeddings(xs_normalized, self.linear_v)
 
-        chex.assert_equal_shape(new_ks, new_vs)
+        chex.assert_equal_shape([new_ks, new_vs])
         chex.assert_axis_dimension(new_ks, 0, seq_len)
         chex.assert_axis_dimension(new_ks, 1, self.num_attention_heads)
         chex.assert_axis_dimension(new_ks, 2, self.size_attention_heads)
@@ -140,7 +140,7 @@ class AttentionModule(eqx.Module):
         # Concat full keys and values and update state.
         ks = jnp.concat([old_ks, new_ks], axis=0)
         vs = jnp.concat([old_vs, new_vs], axis=0)
-        new_state = state.set(self.index, (ks, vs))
+        new_state = state.set(self.state_index, (ks, vs))
 
         # Compute queries (using updated indices for RoPE).
         new_qs = self._compute_embeddings(
@@ -150,14 +150,14 @@ class AttentionModule(eqx.Module):
             start_index=context_len,
         )
 
-        chex.assert_equal_shape(new_qs, new_ks)
+        chex.assert_equal_shape([new_qs, new_ks])
 
         # Compute attention and return.
         attention_out = compute_self_attention(
             new_qs, ks, vs, attn_implementation=self.attn_implementation
         )
 
-        chex.assert_equal_shape(attention_out, new_qs)
+        chex.assert_equal_shape([attention_out, new_qs])
 
         return jax.vmap(self.linear_o)(jax.lax.collapse(attention_out, 1, 3)), new_state
 

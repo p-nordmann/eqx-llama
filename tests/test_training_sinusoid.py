@@ -6,26 +6,22 @@ import optax
 from eqx_llama import LLaMA, LLaMAConfig
 
 
-def compute_loss(model, inputs):
-    return jnp.mean(
-        optax.softmax_cross_entropy_with_integer_labels(
-            jax.vmap(model)(inputs)[:, :-1],
-            inputs[:, 1:],
-        )
-    )
+def compute_loss(model, state, inputs):
+    out, _ = jax.vmap(model, in_axes=(0, None))(inputs, state)[:, :-1]
+    return jnp.mean(optax.softmax_cross_entropy_with_integer_labels(out, inputs[:, 1:]))
 
 
 @eqx.filter_jit
-def make_step(model, inputs, opt, opt_state):
-    _, grads = eqx.filter_value_and_grad(compute_loss)(model, inputs)
+def make_step(model, state, inputs, opt, opt_state):
+    grads = eqx.filter_grad(compute_loss)(model, state, inputs)
     updates, opt_state = opt.update(grads, opt_state, model)
     model = eqx.apply_updates(model, updates)
     return model, opt_state
 
 
 @eqx.filter_jit
-def make_eval_step(model, inputs):
-    return compute_loss(model, inputs)
+def make_eval_step(model, state, inputs):
+    return compute_loss(model, state, inputs)
 
 
 def make_epoch(data, window_size, batch_size, *, key):
@@ -84,7 +80,7 @@ def test_training_sinusoid():
 
     # Make model.
     key, key_model = jax.random.split(key)
-    model = LLaMA(
+    model, state = eqx.nn.make_with_state(LLaMA)(
         config=config,
         key=key_model,
         attn_implementation="xla",
@@ -100,7 +96,7 @@ def test_training_sinusoid():
     for inputs in make_epoch(
         data=data_test, window_size=window_size, batch_size=batch_size, key=key_epoch
     ):
-        loss = make_eval_step(model, inputs)
+        loss = make_eval_step(model, state, inputs)
         losses_before.append(loss)
 
     # Train model after training.
@@ -108,7 +104,7 @@ def test_training_sinusoid():
     for inputs in make_epoch(
         data=data_train, window_size=window_size, batch_size=batch_size, key=key_epoch
     ):
-        model, opt_state = make_step(model, inputs, opt, opt_state)
+        model, opt_state = make_step(model, state, inputs, opt, opt_state)
 
     # Eval model.
     key, key_epoch = jax.random.split(key)
@@ -116,7 +112,7 @@ def test_training_sinusoid():
     for inputs in make_epoch(
         data=data_test, window_size=window_size, batch_size=batch_size, key=key_epoch
     ):
-        loss = make_eval_step(model, inputs)
+        loss = make_eval_step(model, state, inputs)
         losses_after.append(loss)
 
     # Check that loss is good.

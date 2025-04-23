@@ -37,7 +37,7 @@ class LLaMALayer(eqx.Module):
         self,
         xs: Float[Array, " seq_len size_layer"],
         state: eqx.nn.State,
-    ) -> tuple[Float[Array, " seq_len size_layer"], eqx.nn.state]:
+    ) -> tuple[Float[Array, " seq_len size_layer"], eqx.nn.State]:
         attention_out, state = self.attention_module(xs, state)
         xs = xs + attention_out
         xs = xs + self.feed_forward_module(xs)
