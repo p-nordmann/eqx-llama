@@ -5,7 +5,6 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, PRNGKeyArray
 
-from .kv_store import KVStore
 from .llama_config import LLaMAConfig
 from .normalization import RMSLayerNorm
 
@@ -94,8 +93,8 @@ class AttentionModule(eqx.Module):
     def __call__(
         self,
         xs: Float[Array, " seq_len size_layer"],
-        kv_store: KVStore,
-    ) -> Float[Array, " seq_len size_layer"]:
+        state: eqx.nn.State,
+    ) -> tuple[Float[Array, " seq_len size_layer"], eqx.nn.State]:
         xs_normalized = jax.vmap(self.norm)(xs)
         qs = self._compute_embeddings(
             xs_normalized,
@@ -109,7 +108,19 @@ class AttentionModule(eqx.Module):
         )
         vs = self._compute_embeddings(xs_normalized, self.linear_v)
 
-        kv_store.add_many(ks, vs)
-        attention_out = kv_store.query_many(qs)
+        # TODO use state as a kv cache
+        attention_out = (qs, ks, vs)
 
-        return jax.vmap(self.linear_o)(jax.lax.collapse(attention_out, 1, 3))
+        return jax.vmap(self.linear_o)(jax.lax.collapse(attention_out, 1, 3)), state
+
+
+def compute_self_attention(
+    qs: Float[Array, " seqlen num_heads head_dim"],
+    ks: Float[Array, " seqlen num_heads head_dim"],
+    vs: Float[Array, " seqlen num_heads head_dim"],
+    *,
+    attn_implementation: Literal["xla", "cudnn"] = "xla",
+) -> Float[Array, " seqlen num_heads head_dim"]:
+    return jax.nn.dot_product_attention(
+        qs, ks, vs, is_causal=True, implementation=attn_implementation
+    )
