@@ -3,7 +3,7 @@ from typing import Dict, NamedTuple, Optional, Tuple, TypeAlias
 import jax
 import jax.numpy as jnp
 import jax.tree_util as jtu
-from jaxtyping import Array, Float
+from jaxtyping import Array, Float, PRNGKeyArray
 
 
 class LLaMAConfig(NamedTuple):
@@ -96,3 +96,25 @@ class KVCache:
             layer_reprs.append(f"L{str(layer_id)[-4:]}:(k={ks_shape})")
         layers_str = ", ".join(layer_reprs)
         return f"KVCache(count={count}, layers=[{layers_str}])"
+
+
+def init_weights(
+    shape: tuple[int, int],
+    key: PRNGKeyArray,
+    dtype: Optional[jax.typing.DTypeLike] = None,
+) -> Array:
+    fan_in, *rest = shape
+    std = jnp.sqrt(2 / fan_in)
+    if dtype is None:
+        return std * jax.random.truncated_normal(
+            key=key, lower=-2, upper=2, shape=(fan_in, *rest)
+        )
+    return std * jax.random.truncated_normal(
+        key=key, lower=-2, upper=2, shape=(fan_in, *rest), dtype=dtype
+    )
+
+
+def safe_concat(left: Array | None, right: Array, axis: int | None = 0) -> Array:
+    if left is None:
+        return right
+    return jnp.concat([left, right], axis)

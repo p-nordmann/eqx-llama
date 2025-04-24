@@ -20,18 +20,12 @@ class LLaMALayer(eqx.Module):
         key: PRNGKeyArray,
         attn_implementation: Literal["xla", "cudnn"] = "xla",
     ):
-        key_attention, key = jax.random.split(key)
-        self.attention_module = AttentionModule(
-            config,
-            key=key_attention,
-            attn_implementation=attn_implementation,
-        )
+        k1, k2, key = jax.random.split(key, 3)
 
-        key_feedforward, key = jax.random.split(key)
-        self.feed_forward_module = FeedForwardModule(
-            config,
-            key=key_feedforward,
+        self.attention_module = AttentionModule(
+            config, key=k1, attn_implementation=attn_implementation
         )
+        self.feed_forward_module = FeedForwardModule(config, key=k2)
 
     def __call__(
         self,
