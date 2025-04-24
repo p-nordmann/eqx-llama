@@ -132,7 +132,7 @@ class AttentionModule(eqx.Module):
         # Concat full keys and values and update state.
         ks = jnp.concat([old_ks, new_ks], axis=0)
         vs = jnp.concat([old_vs, new_vs], axis=0)
-        new_state = cache.set(id(self), ks, vs)
+        new_cache = cache.set(id(self), ks, vs)
 
         # Compute queries (using updated indices for RoPE).
         new_qs = self._compute_embeddings(
@@ -151,7 +151,7 @@ class AttentionModule(eqx.Module):
 
         chex.assert_equal_shape([attention_out, new_qs])
 
-        return jax.vmap(self.linear_o)(jax.lax.collapse(attention_out, 1, 3)), new_state
+        return jax.vmap(self.linear_o)(jax.lax.collapse(attention_out, 1, 3)), new_cache
 
 
 def compute_self_attention(

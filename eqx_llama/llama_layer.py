@@ -37,9 +37,9 @@ class LLaMALayer(eqx.Module):
     def __call__(
         self,
         xs: Float[Array, " seq_len size_layer"],
-        state: KVCache,
+        cache: KVCache,
     ) -> tuple[Float[Array, " seq_len size_layer"], KVCache]:
-        attention_out, state = self.attention_module(xs, state)
+        attention_out, cache = self.attention_module(xs, cache)
         xs = xs + attention_out
         xs = xs + self.feed_forward_module(xs)
-        return xs, state
+        return xs, cache

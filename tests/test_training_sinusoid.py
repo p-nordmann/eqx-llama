@@ -7,24 +7,24 @@ from eqx_llama import LLaMA, LLaMAConfig
 from eqx_llama.kv_cache import KVCache
 
 
-def compute_loss(model, state, inputs):
-    outputs, _ = jax.vmap(model, in_axes=(0, None))(inputs, state)
+def compute_loss(model, cache, inputs):
+    outputs, _ = jax.vmap(model, in_axes=(0, None))(inputs, cache)
     return jnp.mean(
         optax.softmax_cross_entropy_with_integer_labels(outputs[:, :-1], inputs[:, 1:])
     )
 
 
 @eqx.filter_jit
-def make_step(model, state, inputs, opt, opt_state):
-    grads = eqx.filter_grad(compute_loss)(model, state, inputs)
+def make_step(model, cache, inputs, opt, opt_state):
+    grads = eqx.filter_grad(compute_loss)(model, cache, inputs)
     updates, opt_state = opt.update(grads, opt_state, model)
     model = eqx.apply_updates(model, updates)
     return model, opt_state
 
 
 @eqx.filter_jit
-def make_eval_step(model, state, inputs):
-    return compute_loss(model, state, inputs)
+def make_eval_step(model, cache, inputs):
+    return compute_loss(model, cache, inputs)
 
 
 def make_epoch(data, window_size, batch_size, *, key):

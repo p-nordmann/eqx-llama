@@ -49,13 +49,13 @@ class LLaMA(eqx.Module):
     def __call__(
         self,
         tokens: Integer[Array, " seq_len"],
-        state: KVCache,
+        cache: KVCache,
     ) -> tuple[Float[Array, " seq_len size_vocab"], KVCache]:
         xs = jax.vmap(self.embeddings)(tokens)
 
         for layer in self.layers:
-            xs, state = layer(xs, state)
+            xs, cache = layer(xs, cache)
 
         out = jax.vmap(self.head, in_axes=(0))(xs)
 
-        return out, state
+        return out, cache
