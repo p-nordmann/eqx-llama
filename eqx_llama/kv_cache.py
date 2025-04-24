@@ -9,14 +9,6 @@ KVCacheDict: TypeAlias = Dict[int, LayerKVCache]
 
 @jtu.register_pytree_node_class
 class KVCache:
-    """
-    Manages KV caches using simple concatenation.
-
-    - No pre-allocation or resizing.
-    - Cache grows dynamically via jnp.concatenate.
-    - Expect JIT recompilation during inference when cache shapes change.
-    """
-
     _state: KVCacheDict
 
     def __init__(self, initial_state: Optional[KVCacheDict] = None):
@@ -48,4 +40,4 @@ class KVCache:
             ks_shape = ks.shape if ks is not None else None
             layer_reprs.append(f"L{str(layer_id)[-4:]}:(k={ks_shape})")
         layers_str = ", ".join(layer_reprs)
-        return f"SimpleCacheState(count={count}, layers=[{layers_str}])"
+        return f"KVCache(count={count}, layers=[{layers_str}])"
