@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import optax
 
 from eqx_llama import LLaMA, LLaMAConfig
-from eqx_llama.kv_cache import KVCacheState
+from eqx_llama.kv_cache import KVCache
 
 
 def compute_loss(model, state, inputs):
@@ -88,7 +88,7 @@ def test_training_sinusoid():
         key=key_model,
         attn_implementation="xla",
     )
-    cache = KVCacheState()
+    cache = KVCache()
 
     # Make optimizer.
     opt = optax.adam(learning_rate)

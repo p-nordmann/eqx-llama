@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, PRNGKeyArray
 
-from .kv_cache import KVCacheState
+from .kv_cache import KVCache
 from .llama_config import LLaMAConfig
 from .normalization import RMSLayerNorm
 
@@ -98,8 +98,8 @@ class AttentionModule(eqx.Module):
     def __call__(
         self,
         xs: Float[Array, " seq_len size_layer"],
-        cache: KVCacheState,
-    ) -> tuple[Float[Array, " seq_len size_layer"], KVCacheState]:
+        cache: KVCache,
+    ) -> tuple[Float[Array, " seq_len size_layer"], KVCache]:
         seq_len = xs.shape[0]
         xs_normalized = jax.vmap(self.norm)(xs)
 

@@ -10,7 +10,7 @@ KVCacheDict: TypeAlias = Dict[int, LayerKVCache]
 
 
 @jtu.register_pytree_node_class
-class KVCacheState:
+class KVCache:
     """
     Manages KV caches using simple concatenation.
 
@@ -28,9 +28,9 @@ class KVCacheState:
         """Gets the cache tuple (k, v) for a layer, returning (None, None) if absent."""
         return self._state.get(layer_id, (None, None))
 
-    def set(self, layer_id: int, ks: jax.Array, vs: jax.Array) -> "KVCacheState":
+    def set(self, layer_id: int, ks: jax.Array, vs: jax.Array) -> "KVCache":
         """Updates the cache."""
-        return KVCacheState(self._state | {layer_id: (ks, vs)})
+        return KVCache(self._state | {layer_id: (ks, vs)})
 
     def tree_flatten(self):
         children = list(self._state.values())
