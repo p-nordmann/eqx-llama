@@ -4,11 +4,14 @@ import jax.numpy as jnp
 import optax
 
 from eqx_llama import LLaMA, LLaMAConfig
+from eqx_llama.kv_cache import KVCacheState
 
 
 def compute_loss(model, state, inputs):
-    out, _ = jax.vmap(model, in_axes=(0, None))(inputs, state)[:, :-1]
-    return jnp.mean(optax.softmax_cross_entropy_with_integer_labels(out, inputs[:, 1:]))
+    outputs, _ = jax.vmap(model, in_axes=(0, None))(inputs, state)
+    return jnp.mean(
+        optax.softmax_cross_entropy_with_integer_labels(outputs[:, :-1], inputs[:, 1:])
+    )
 
 
 @eqx.filter_jit
@@ -80,11 +83,12 @@ def test_training_sinusoid():
 
     # Make model.
     key, key_model = jax.random.split(key)
-    model, state = eqx.nn.make_with_state(LLaMA)(
+    model = LLaMA(
         config=config,
         key=key_model,
         attn_implementation="xla",
     )
+    cache = KVCacheState()
 
     # Make optimizer.
     opt = optax.adam(learning_rate)
@@ -96,7 +100,7 @@ def test_training_sinusoid():
     for inputs in make_epoch(
         data=data_test, window_size=window_size, batch_size=batch_size, key=key_epoch
     ):
-        loss = make_eval_step(model, state, inputs)
+        loss = make_eval_step(model, cache, inputs)
         losses_before.append(loss)
 
     # Train model after training.
@@ -104,7 +108,7 @@ def test_training_sinusoid():
     for inputs in make_epoch(
         data=data_train, window_size=window_size, batch_size=batch_size, key=key_epoch
     ):
-        model, opt_state = make_step(model, state, inputs, opt, opt_state)
+        model, opt_state = make_step(model, cache, inputs, opt, opt_state)
 
     # Eval model.
     key, key_epoch = jax.random.split(key)
@@ -112,7 +116,7 @@ def test_training_sinusoid():
     for inputs in make_epoch(
         data=data_test, window_size=window_size, batch_size=batch_size, key=key_epoch
     ):
-        loss = make_eval_step(model, state, inputs)
+        loss = make_eval_step(model, cache, inputs)
         losses_after.append(loss)
 
     # Check that loss is good.

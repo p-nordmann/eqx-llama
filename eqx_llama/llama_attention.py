@@ -6,6 +6,7 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, PRNGKeyArray
 
+from .kv_cache import KVCacheState
 from .llama_config import LLaMAConfig
 from .normalization import RMSLayerNorm
 
@@ -17,13 +18,6 @@ class AttentionModule(eqx.Module):
     linear_k: eqx.nn.Linear
     linear_v: eqx.nn.Linear
     linear_o: eqx.nn.Linear
-
-    state_index: eqx.nn.StateIndex[
-        tuple[
-            Float[Array, " context_len num_heads head_dim"],
-            Float[Array, " context_len num_heads head_dim"],
-        ]
-    ]
 
     num_attention_heads: int = eqx.field(static=True)
     size_attention_heads: int = eqx.field(static=True)
@@ -83,12 +77,6 @@ class AttentionModule(eqx.Module):
             key=key_linear,
         )
 
-        init_buffers = (
-            jnp.empty((0, self.num_attention_heads, self.size_attention_heads)),
-            jnp.empty((0, self.num_attention_heads, self.size_attention_heads)),
-        )
-        self.state_index = eqx.nn.StateIndex(init_buffers)
-
     def _compute_embeddings(
         self,
         xs: Float[Array, " seq_len size_layer"],
@@ -110,13 +98,17 @@ class AttentionModule(eqx.Module):
     def __call__(
         self,
         xs: Float[Array, " seq_len size_layer"],
-        state: eqx.nn.State,
-    ) -> tuple[Float[Array, " seq_len size_layer"], eqx.nn.State]:
+        cache: KVCacheState,
+    ) -> tuple[Float[Array, " seq_len size_layer"], KVCacheState]:
         seq_len = xs.shape[0]
         xs_normalized = jax.vmap(self.norm)(xs)
 
         # Retrieve cached keys and values.
-        old_ks, old_vs = state.get(self.state_index)
+        old_ks, old_vs = cache.get(id(self))
+        if old_ks is None:
+            old_ks = jnp.empty((0, self.num_attention_heads, self.size_attention_heads))
+        if old_vs is None:
+            old_vs = jnp.empty((0, self.num_attention_heads, self.size_attention_heads))
         context_len = old_ks.shape[0]
 
         chex.assert_equal_shape([old_ks, old_vs])
@@ -140,7 +132,7 @@ class AttentionModule(eqx.Module):
         # Concat full keys and values and update state.
         ks = jnp.concat([old_ks, new_ks], axis=0)
         vs = jnp.concat([old_vs, new_vs], axis=0)
-        new_state = state.set(self.state_index, (ks, vs))
+        new_state = cache.set(id(self), ks, vs)
 
         # Compute queries (using updated indices for RoPE).
         new_qs = self._compute_embeddings(

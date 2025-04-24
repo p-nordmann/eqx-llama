@@ -4,6 +4,7 @@ import equinox as eqx
 import jax
 from jaxtyping import Array, Float, PRNGKeyArray
 
+from .kv_cache import KVCacheState
 from .llama_attention import AttentionModule
 from .llama_config import LLaMAConfig
 from .llama_feed_forward import FeedForwardModule
@@ -36,8 +37,8 @@ class LLaMALayer(eqx.Module):
     def __call__(
         self,
         xs: Float[Array, " seq_len size_layer"],
-        state: eqx.nn.State,
-    ) -> tuple[Float[Array, " seq_len size_layer"], eqx.nn.State]:
+        state: KVCacheState,
+    ) -> tuple[Float[Array, " seq_len size_layer"], KVCacheState]:
         attention_out, state = self.attention_module(xs, state)
         xs = xs + attention_out
         xs = xs + self.feed_forward_module(xs)
