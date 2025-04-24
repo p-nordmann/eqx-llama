@@ -4,6 +4,7 @@ import equinox as eqx
 import jax
 from jaxtyping import Array, Float, Integer, PRNGKeyArray
 
+from .kv_cache import KVCache
 from .llama_config import LLaMAConfig
 from .llama_head import LLaMAHead
 from .llama_layer import LLaMALayer
@@ -48,12 +49,13 @@ class LLaMA(eqx.Module):
     def __call__(
         self,
         tokens: Integer[Array, " seq_len"],
-    ) -> Float[Array, " seq_len size_vocab"]:
+        cache: KVCache,
+    ) -> tuple[Float[Array, " seq_len size_vocab"], KVCache]:
         xs = jax.vmap(self.embeddings)(tokens)
 
         for layer in self.layers:
-            xs = layer(xs)
+            xs, cache = layer(xs, cache)
 
         out = jax.vmap(self.head, in_axes=(0))(xs)
 
-        return out
+        return out, cache
