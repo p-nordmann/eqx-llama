@@ -2,8 +2,8 @@ import equinox as eqx
 import jax
 from jaxtyping import Array, Float, PRNGKeyArray
 
-from .llama_config import LLaMAConfig
 from .normalization import RMSLayerNorm
+from .utils import LLaMAConfig
 
 
 class LLaMAHead(eqx.Module):

@@ -4,10 +4,9 @@ import equinox as eqx
 import jax
 from jaxtyping import Array, Float, Integer, PRNGKeyArray
 
-from .kv_cache import KVCache
-from .llama_config import LLaMAConfig
 from .llama_head import LLaMAHead
 from .llama_layer import LLaMALayer
+from .utils import KVCache, LLaMAConfig
 
 
 class LLaMA(eqx.Module):

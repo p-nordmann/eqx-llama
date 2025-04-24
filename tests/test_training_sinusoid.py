@@ -3,8 +3,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from eqx_llama import LLaMA, LLaMAConfig
-from eqx_llama.kv_cache import KVCache
+from eqx_llama import KVCache, LLaMA, LLaMAConfig
 
 
 def compute_loss(model, cache, inputs):

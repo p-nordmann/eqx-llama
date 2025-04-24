@@ -6,9 +6,8 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, PRNGKeyArray
 
-from .kv_cache import KVCache
-from .llama_config import LLaMAConfig
 from .normalization import RMSLayerNorm
+from .utils import KVCache, LLaMAConfig, apply_rotary_embeddings
 
 
 class AttentionModule(eqx.Module):
@@ -164,46 +163,3 @@ def compute_self_attention(
     return jax.nn.dot_product_attention(
         qs, ks, vs, is_causal=True, implementation=attn_implementation
     )
-
-
-# def rotary_kernel(x: Float32[Array, " 2"], m_theta: float) -> Float32[Array, " 2"]:
-def rotary_kernel(x, m_theta):
-    """The core operation of rotary embeddings acts over two dimensions."""
-    theta_kernel = jnp.array(
-        [
-            [jnp.cos(m_theta), -jnp.sin(m_theta)],
-            [jnp.sin(m_theta), jnp.cos(m_theta)],
-        ]
-    )
-    return theta_kernel @ x
-
-
-# def generalized_rotary_kernel(
-#     x: Float32[Array, " size"], m: Float32, thetas: Float32[Array, " half_size"]
-# ) -> Float32[Array, " half_size"]:
-def generalized_rotary_kernel(x, m, thetas):
-    """Applies the rotary kernel along a vector of even dimension.
-
-    Thetas must be provided.
-    """
-    pairs_of_xi = jnp.reshape(
-        x,
-        shape=(-1, 2),
-        order="C",  # Order is critical to be consistent with the original LLaMAs!
-    )
-    pairs_of_embeddings = jax.vmap(rotary_kernel)(pairs_of_xi, m * thetas)
-    return jax.lax.collapse(pairs_of_embeddings, 0, 2)
-
-
-def apply_rotary_embeddings(
-    xs: Float[Array, " seq_len size"],
-    start_index: int = 0,
-    *,
-    theta_base: float = 1e4,
-    dtype=jnp.float16,
-) -> Float[Array, " seq_len size"]:
-    """Applies the rotary kernel through a full sequence with even dimension."""
-    half_dim = xs.shape[1] // 2
-    ms = jnp.arange(start_index, xs.shape[0] + start_index)
-    thetas = theta_base ** (-jnp.arange(0, half_dim, dtype=dtype) / half_dim)
-    return jax.vmap(generalized_rotary_kernel, in_axes=[0, 0, None])(xs, ms, thetas)
