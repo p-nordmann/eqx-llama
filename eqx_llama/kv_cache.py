@@ -1,5 +1,3 @@
-# kv_cache_simple_concat.py
-
 from typing import Dict, Optional, Tuple, TypeAlias
 
 import jax
