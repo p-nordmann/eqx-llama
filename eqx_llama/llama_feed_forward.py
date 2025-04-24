@@ -3,8 +3,7 @@ import equinox as eqx
 import jax
 from jaxtyping import Array, Float, PRNGKeyArray
 
-from .normalization import RMSLayerNorm
-from .utils import LLaMAConfig, init_weights
+from .utils import LLaMAConfig, RMSLayerNorm, init_weights
 
 
 class FeedForwardModule(eqx.Module):

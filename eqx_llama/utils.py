@@ -1,5 +1,6 @@
 from typing import Dict, NamedTuple, Optional, Tuple, TypeAlias
 
+import equinox as eqx
 import jax
 import jax.numpy as jnp
 import jax.tree_util as jtu
@@ -13,6 +14,26 @@ class LLaMAConfig(NamedTuple):
     attention_num_heads: int
     attention_head_dim: int
     feed_forward_dim: int
+
+
+class RMSLayerNorm(eqx.Module):
+    """Similar to layer normalization, without the mean estimate.
+
+    Known to give similar results to layer norm, with reduced compute.
+    """
+
+    weight: Float[Array, " dim"]
+    eps: float = eqx.field(static=True)
+
+    def __init__(self, dim: int, eps: float = 1e-6, **kwargs):
+        super().__init__(**kwargs)
+        self.weight = jnp.ones(shape=(dim,))
+        self.eps = eps
+
+    def __call__(self, x: Float[Array, " dim"]) -> Float[Array, " dim"]:
+        moment_2 = jnp.mean(x.astype(self.weight.dtype) ** 2, axis=-1, keepdims=True)
+        x_normed = x * jax.lax.rsqrt(moment_2 + self.eps)
+        return (self.weight * x_normed).astype(x.dtype)
 
 
 # def rotary_kernel(x: Float32[Array, " 2"], m_theta: float) -> Float32[Array, " 2"]:

@@ -6,10 +6,10 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, PRNGKeyArray
 
-from .normalization import RMSLayerNorm
 from .utils import (
     KVCache,
     LLaMAConfig,
+    RMSLayerNorm,
     apply_rotary_embeddings,
     init_weights,
     safe_concat,

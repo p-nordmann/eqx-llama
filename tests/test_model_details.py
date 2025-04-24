@@ -1,8 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from eqx_llama.normalization import RMSLayerNorm
-from eqx_llama.utils import apply_rotary_embeddings
+from eqx_llama.utils import RMSLayerNorm, apply_rotary_embeddings
 
 
 def test_rms_layernorm():
