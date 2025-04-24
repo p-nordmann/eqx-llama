@@ -23,8 +23,8 @@ class LLaMA(eqx.Module):
     ):
         key_embeddings, key = jax.random.split(key)
         self.embeddings = eqx.nn.Embedding(
-            config.size_vocab,
-            config.size_layer,
+            config.vocab_size,
+            config.layer_dim,
             key=key_embeddings,
         )
 
@@ -49,7 +49,7 @@ class LLaMA(eqx.Module):
         self,
         tokens: Integer[Array, " seq_len"],
         cache: KVCache,
-    ) -> tuple[Float[Array, " seq_len size_vocab"], KVCache]:
+    ) -> tuple[Float[Array, " seq_len vocab_size"], KVCache]:
         xs = jax.vmap(self.embeddings)(tokens)
 
         for layer in self.layers:

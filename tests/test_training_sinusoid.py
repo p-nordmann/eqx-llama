@@ -54,11 +54,11 @@ def test_training_sinusoid():
     noise_std = 0.3
     config = LLaMAConfig(
         num_layers=2,
-        size_vocab=90,
-        size_layer=50,
-        num_attention_heads=5,
-        size_attention_heads=10,
-        size_hidden=300,
+        vocab_size=90,
+        layer_dim=50,
+        attention_num_heads=5,
+        attention_head_dim=10,
+        feed_forward_dim=300,
     )
     learning_rate = 1e-3
     batch_size = 100

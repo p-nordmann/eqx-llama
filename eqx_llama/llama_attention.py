@@ -27,7 +27,7 @@ class AttentionModule(eqx.Module):
     norm: RMSLayerNorm
     weights: _AttentionWeights
 
-    size_layer: int = eqx.field(static=True)
+    layer_dim: int = eqx.field(static=True)
     num_heads: int = eqx.field(static=True)
     head_dim: int = eqx.field(static=True)
     attn_implementation: Literal["xla", "cudnn"] = eqx.field(static=True)
@@ -40,29 +40,28 @@ class AttentionModule(eqx.Module):
         attn_implementation: Literal["xla", "cudnn"] = "xla",
     ):
         assert (
-            config.num_attention_heads * config.size_attention_heads
-            == config.size_layer
+            config.attention_num_heads * config.attention_head_dim == config.layer_dim
         )
         k1, k2, k3, k4, key = jax.random.split(key, 5)
 
-        self.size_layer = config.size_layer
-        self.num_heads = config.num_attention_heads
-        self.head_dim = config.size_attention_heads
+        self.layer_dim = config.layer_dim
+        self.num_heads = config.attention_num_heads
+        self.head_dim = config.attention_head_dim
         self.attn_implementation = attn_implementation
 
-        self.norm = RMSLayerNorm(config.size_layer)
+        self.norm = RMSLayerNorm(config.layer_dim)
         self.weights = _AttentionWeights(
-            init_weights((config.size_layer, self.num_heads, self.head_dim), k1),
-            init_weights((config.size_layer, self.num_heads, self.head_dim), k2),
-            init_weights((config.size_layer, self.num_heads, self.head_dim), k3),
-            init_weights((config.size_layer, self.num_heads, self.head_dim), k4),
+            init_weights((config.layer_dim, self.num_heads, self.head_dim), k1),
+            init_weights((config.layer_dim, self.num_heads, self.head_dim), k2),
+            init_weights((config.layer_dim, self.num_heads, self.head_dim), k3),
+            init_weights((config.layer_dim, self.num_heads, self.head_dim), k4),
         )
 
     def _compute_embeddings(
         self,
-        xs: Float[Array, " seq_len size_layer"],
+        xs: Float[Array, " seq_len layer_dim"],
         start_index: int = 0,
-    ) -> Float[Array, " seq_len num_heads size_heads"]:
+    ) -> Float[Array, " seq_len num_heads head_dim"]:
         apply_rope = jax.vmap(
             lambda h: apply_rotary_embeddings(h, start_index), in_axes=1, out_axes=1
         )
@@ -73,9 +72,9 @@ class AttentionModule(eqx.Module):
 
     def __call__(
         self,
-        xs: Float[Array, " seq_len size_layer"],
+        xs: Float[Array, " seq_len layer_dim"],
         cache: KVCache,
-    ) -> tuple[Float[Array, " seq_len size_layer"], KVCache]:
+    ) -> tuple[Float[Array, " seq_len layer_dim"], KVCache]:
         seq_len = xs.shape[0]
 
         old_ks, old_vs = cache.get(id(self))
@@ -104,7 +103,7 @@ class AttentionModule(eqx.Module):
         chex.assert_shape(
             [new_qs, new_ks, new_vs], (seq_len, self.num_heads, self.head_dim)
         )
-        chex.assert_shape([xs, xs_normalized, out], (seq_len, self.size_layer))
+        chex.assert_shape([xs, xs_normalized, out], (seq_len, self.layer_dim))
 
         return out, cache
 

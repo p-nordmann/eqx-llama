@@ -8,11 +8,11 @@ from jaxtyping import Array, Float, PRNGKeyArray
 
 class LLaMAConfig(NamedTuple):
     num_layers: int
-    size_vocab: int
-    size_layer: int
-    num_attention_heads: int
-    size_attention_heads: int
-    size_hidden: int
+    vocab_size: int
+    layer_dim: int
+    attention_num_heads: int
+    attention_head_dim: int
+    feed_forward_dim: int
 
 
 # def rotary_kernel(x: Float32[Array, " 2"], m_theta: float) -> Float32[Array, " 2"]:
