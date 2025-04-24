@@ -19,6 +19,6 @@ class RMSLayerNorm(eqx.Module):
         self.eps = eps
 
     def __call__(self, x: Float[Array, " dim"]) -> Float[Array, " dim"]:
-        moment_2 = jnp.mean(jnp.square(x), axis=-1, keepdims=True)
+        moment_2 = jnp.mean(x.astype(self.weight.dtype) ** 2, axis=-1, keepdims=True)
         x_normed = x * jax.lax.rsqrt(moment_2 + self.eps)
-        return self.weight * x_normed
+        return (self.weight * x_normed).astype(x.dtype)

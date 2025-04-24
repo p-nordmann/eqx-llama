@@ -19,41 +19,27 @@ class LLaMA(eqx.Module):
         config: LLaMAConfig,
         *,
         key: PRNGKeyArray,
-        attn_implementation: Literal["xla", "cudnn"] = "xla",
+        dtype: jax.typing.DTypeLike = "float32",
     ):
-        key_embeddings, key = jax.random.split(key)
+        k1, k2, key = jax.random.split(key, 3)
         self.embeddings = eqx.nn.Embedding(
-            config.vocab_size,
-            config.layer_dim,
-            key=key_embeddings,
+            config.vocab_size, config.layer_dim, key=k1, dtype=dtype
         )
+        self.head = LLaMAHead(config, key=k2, dtype=dtype)
 
-        self.layers = []
-        for _ in range(config.num_layers):
-            key_layer, key = jax.random.split(key)
-            self.layers.append(
-                LLaMALayer(
-                    config,
-                    key=key_layer,
-                    attn_implementation=attn_implementation,
-                )
-            )
-
-        key_head, key = jax.random.split(key)
-        self.head = LLaMAHead(
-            config,
-            key=key_head,
-        )
+        key, *ks = jax.random.split(key, config.num_layers + 1)
+        self.layers = [LLaMALayer(config, key=k, dtype=dtype) for k in ks]
 
     def __call__(
         self,
         tokens: Integer[Array, " seq_len"],
         cache: KVCache,
+        attn_implementation: Literal["xla", "cudnn"] = "xla",
     ) -> tuple[Float[Array, " seq_len vocab_size"], KVCache]:
         xs = jax.vmap(self.embeddings)(tokens)
 
         for layer in self.layers:
-            xs, cache = layer(xs, cache)
+            xs, cache = layer(xs, cache, attn_implementation=attn_implementation)
 
         out = jax.vmap(self.head, in_axes=(0))(xs)
 

@@ -30,14 +30,13 @@ class AttentionModule(eqx.Module):
     layer_dim: int = eqx.field(static=True)
     num_heads: int = eqx.field(static=True)
     head_dim: int = eqx.field(static=True)
-    attn_implementation: Literal["xla", "cudnn"] = eqx.field(static=True)
 
     def __init__(
         self,
         config: LLaMAConfig,
         *,
         key: PRNGKeyArray,
-        attn_implementation: Literal["xla", "cudnn"] = "xla",
+        dtype: jax.typing.DTypeLike = "float32",
     ):
         assert (
             config.attention_num_heads * config.attention_head_dim == config.layer_dim
@@ -47,14 +46,13 @@ class AttentionModule(eqx.Module):
         self.layer_dim = config.layer_dim
         self.num_heads = config.attention_num_heads
         self.head_dim = config.attention_head_dim
-        self.attn_implementation = attn_implementation
 
         self.norm = RMSLayerNorm(config.layer_dim)
         self.weights = _AttentionWeights(
-            init_weights((config.layer_dim, self.num_heads, self.head_dim), k1),
-            init_weights((config.layer_dim, self.num_heads, self.head_dim), k2),
-            init_weights((config.layer_dim, self.num_heads, self.head_dim), k3),
-            init_weights((config.layer_dim, self.num_heads, self.head_dim), k4),
+            init_weights((config.layer_dim, self.num_heads, self.head_dim), k1, dtype),
+            init_weights((config.layer_dim, self.num_heads, self.head_dim), k2, dtype),
+            init_weights((config.layer_dim, self.num_heads, self.head_dim), k3, dtype),
+            init_weights((config.layer_dim, self.num_heads, self.head_dim), k4, dtype),
         )
 
     def _compute_embeddings(
@@ -74,13 +72,12 @@ class AttentionModule(eqx.Module):
         self,
         xs: Float[Array, " seq_len layer_dim"],
         cache: KVCache,
+        attn_implementation: Literal["xla", "cudnn"] = "xla",
     ) -> tuple[Float[Array, " seq_len layer_dim"], KVCache]:
         seq_len = xs.shape[0]
 
         old_ks, old_vs = cache.get(id(self))
-        context_len = 0
-        if old_ks is not None:
-            context_len = old_ks.shape[0]
+        context_len = old_ks.shape[0] if old_ks is not None else 0
 
         xs_normalized = jax.vmap(self.norm)(xs)
         new_qs, new_ks, new_vs = self._compute_embeddings(
@@ -91,7 +88,7 @@ class AttentionModule(eqx.Module):
         cache = cache.set(id(self), ks, vs)
 
         attention_out = compute_self_attention(
-            new_qs, ks, vs, attn_implementation=self.attn_implementation
+            new_qs, ks, vs, attn_implementation=attn_implementation
         )
         out = jnp.einsum("snh,dnh->sd", attention_out, self.weights.wo)
 

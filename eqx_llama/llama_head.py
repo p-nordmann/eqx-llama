@@ -19,11 +19,12 @@ class LLaMAHead(eqx.Module):
         config: LLaMAConfig,
         *,
         key: PRNGKeyArray,
+        dtype: jax.typing.DTypeLike = "float32",
     ):
         k1, key = jax.random.split(key)
 
         self.norm = RMSLayerNorm(config.layer_dim)
-        self.weights = init_weights((config.layer_dim, config.vocab_size), k1)
+        self.weights = init_weights((config.layer_dim, config.vocab_size), k1, dtype)
 
         self.layer_dim = config.layer_dim
         self.vocab_size = config.vocab_size

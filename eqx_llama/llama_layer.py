@@ -18,21 +18,22 @@ class LLaMALayer(eqx.Module):
         config: LLaMAConfig,
         *,
         key: PRNGKeyArray,
-        attn_implementation: Literal["xla", "cudnn"] = "xla",
+        dtype: jax.typing.DTypeLike = "float32",
     ):
         k1, k2, key = jax.random.split(key, 3)
 
-        self.attention_module = AttentionModule(
-            config, key=k1, attn_implementation=attn_implementation
-        )
-        self.feed_forward_module = FeedForwardModule(config, key=k2)
+        self.attention_module = AttentionModule(config, key=k1, dtype=dtype)
+        self.feed_forward_module = FeedForwardModule(config, key=k2, dtype=dtype)
 
     def __call__(
         self,
         xs: Float[Array, " seq_len layer_dim"],
         cache: KVCache,
+        attn_implementation: Literal["xla", "cudnn"] = "xla",
     ) -> tuple[Float[Array, " seq_len layer_dim"], KVCache]:
-        attention_out, cache = self.attention_module(xs, cache)
+        attention_out, cache = self.attention_module(
+            xs, cache, attn_implementation=attn_implementation
+        )
         xs = xs + attention_out
         xs = xs + self.feed_forward_module(xs)
         return xs, cache

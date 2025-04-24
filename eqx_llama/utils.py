@@ -24,7 +24,7 @@ def rotary_kernel(x, m_theta):
             [jnp.sin(m_theta), jnp.cos(m_theta)],
         ]
     )
-    return theta_kernel @ x
+    return theta_kernel.astype(x.dtype) @ x
 
 
 # def generalized_rotary_kernel(
@@ -49,12 +49,11 @@ def apply_rotary_embeddings(
     start_index: int = 0,
     *,
     theta_base: float = 1e4,
-    dtype=jnp.float16,
 ) -> Float[Array, " seq_len size"]:
     """Applies the rotary kernel through a full sequence with even dimension."""
     half_dim = xs.shape[1] // 2
     ms = jnp.arange(start_index, xs.shape[0] + start_index)
-    thetas = theta_base ** (-jnp.arange(0, half_dim, dtype=dtype) / half_dim)
+    thetas = theta_base ** (-jnp.arange(0, half_dim) / half_dim)
     return jax.vmap(generalized_rotary_kernel, in_axes=[0, 0, None])(xs, ms, thetas)
 
 
@@ -101,14 +100,10 @@ class KVCache:
 def init_weights(
     shape: tuple[int, int],
     key: PRNGKeyArray,
-    dtype: Optional[jax.typing.DTypeLike] = None,
+    dtype: jax.typing.DTypeLike = "float32",
 ) -> Array:
     fan_in, *rest = shape
     std = jnp.sqrt(2 / fan_in)
-    if dtype is None:
-        return std * jax.random.truncated_normal(
-            key=key, lower=-2, upper=2, shape=(fan_in, *rest)
-        )
     return std * jax.random.truncated_normal(
         key=key, lower=-2, upper=2, shape=(fan_in, *rest), dtype=dtype
     )

@@ -82,11 +82,7 @@ def test_training_sinusoid():
 
     # Make model.
     key, key_model = jax.random.split(key)
-    model = LLaMA(
-        config=config,
-        key=key_model,
-        attn_implementation="xla",
-    )
+    model = LLaMA(config=config, key=key_model, dtype=jnp.bfloat16)
     cache = KVCache()
 
     # Make optimizer.
