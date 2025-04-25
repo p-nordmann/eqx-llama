@@ -59,7 +59,11 @@ class AttentionModule(eqx.Module):
         self,
         xs: Float[Array, " seq_len layer_dim"],
         start_index: int = 0,
-    ) -> Float[Array, " seq_len num_heads head_dim"]:
+    ) -> tuple[
+        Float[Array, " seq_len num_heads head_dim"],
+        Float[Array, " seq_len num_heads head_dim"],
+        Float[Array, " seq_len num_heads head_dim"],
+    ]:
         apply_rope = jax.vmap(
             lambda h: apply_rotary_embeddings(h, start_index), in_axes=1, out_axes=1
         )
