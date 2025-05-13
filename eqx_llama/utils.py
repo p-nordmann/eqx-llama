@@ -133,4 +133,4 @@ def init_weights(
 def safe_concat(left: Array | None, right: Array, axis: int | None = 0) -> Array:
     if left is None:
         return right
-    return jnp.concat([left, right], axis)
+    return jnp.concat([left, right], axis=axis)

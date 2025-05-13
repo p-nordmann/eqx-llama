@@ -31,6 +31,8 @@ class AttentionModule(eqx.Module):
     num_heads: int = eqx.field(static=True)
     head_dim: int = eqx.field(static=True)
 
+    cache_key: str = eqx.field(static=True)
+
     def __init__(
         self,
         config: LLaMAConfig,
@@ -54,6 +56,8 @@ class AttentionModule(eqx.Module):
             init_weights((config.layer_dim, self.num_heads, self.head_dim), k3, dtype),
             init_weights((config.layer_dim, self.num_heads, self.head_dim), k4, dtype),
         )
+
+        self.cache_key = id(self)
 
     def _compute_embeddings(
         self,
@@ -80,7 +84,7 @@ class AttentionModule(eqx.Module):
     ) -> tuple[Float[Array, " seq_len layer_dim"], KVCache]:
         seq_len = xs.shape[0]
 
-        old_ks, old_vs = cache.get(id(self))
+        old_ks, old_vs = cache.get(self.cache_key)
         context_len = old_ks.shape[0] if old_ks is not None else 0
 
         xs_normalized = jax.vmap(self.norm)(xs)
@@ -89,7 +93,7 @@ class AttentionModule(eqx.Module):
         )
 
         ks, vs = safe_concat(old_ks, new_ks), safe_concat(old_vs, new_vs)
-        cache = cache.set(id(self), ks, vs)
+        cache = cache.set(self.cache_key, ks, vs)
 
         attention_out = compute_self_attention(
             new_qs, ks, vs, attn_implementation=attn_implementation
@@ -97,7 +101,6 @@ class AttentionModule(eqx.Module):
         out = jnp.einsum("snh,dnh->sd", attention_out, self.weights.wo)
 
         if old_ks is not None:
-            chex.assert_type([old_ks, old_vs], jax.Array)
             chex.assert_shape(
                 [old_ks, old_vs], (context_len, self.num_heads, self.head_dim)
             )
