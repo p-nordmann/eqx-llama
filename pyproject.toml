@@ -16,9 +16,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "chex>=0.1.89",
-    "equinox>=0.11.10",
-    "jax[cuda12]>=0.5.3",
-    "jaxtyping>=0.2.36",
+    "equinox>=0.12.1",
+    "jax[cuda12]>=0.6.0",
+    "jaxtyping>=0.3.2",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -27,7 +27,15 @@ classifiers = [
 ]
 
 [dependency-groups]
-dev = ["optax>=0.2.4", "pytest>=8.3.5"]
+dev = [
+    "datasets>=3.6.0",
+    "ipykernel>=6.29.5",
+    "ipywidgets>=8.1.7",
+    "matplotlib>=3.10.3",
+    "optax>=0.2.4",
+    "pytest>=8.3.5",
+    "tqdm>=4.67.1",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
