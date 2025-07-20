@@ -73,13 +73,13 @@ def apply_rotary_embeddings(
 ) -> Float[Array, " seq_len size"]:
     """Applies the rotary kernel through a full sequence with even dimension."""
     half_dim = xs.shape[1] // 2
-    ms = jnp.arange(start_index, xs.shape[0] + start_index)
+    ms = start_index + jnp.arange(xs.shape[0])
     thetas = theta_base ** (-jnp.arange(0, half_dim) / half_dim)
     return jax.vmap(generalized_rotary_kernel, in_axes=[0, 0, None])(xs, ms, thetas)
 
 
 LayerKVCache: TypeAlias = Tuple[Optional[jax.Array], Optional[jax.Array]]
-KVCacheDict: TypeAlias = Dict[int, LayerKVCache]
+KVCacheDict: TypeAlias = Dict[str, LayerKVCache]
 
 
 @jtu.register_pytree_node_class
@@ -89,13 +89,13 @@ class KVCache:
     def __init__(self, initial_state: Optional[KVCacheDict] = None):
         self._state = initial_state if initial_state is not None else {}
 
-    def get(self, layer_id: int) -> LayerKVCache:
+    def get(self, layer_key: str) -> LayerKVCache:
         """Gets the cache tuple (k, v) for a layer, returning (None, None) if absent."""
-        return self._state.get(layer_id, (None, None))
+        return self._state.get(layer_key, (None, None))
 
-    def set(self, layer_id: int, ks: jax.Array, vs: jax.Array) -> "KVCache":
+    def set(self, layer_key: str, ks: jax.Array, vs: jax.Array) -> "KVCache":
         """Updates the cache."""
-        return KVCache(self._state | {layer_id: (ks, vs)})
+        return KVCache(self._state | {layer_key: (ks, vs)})
 
     def tree_flatten(self):
         children = list(self._state.values())
@@ -111,15 +111,15 @@ class KVCache:
     def __repr__(self):
         count = len(self._state)
         layer_reprs = []
-        for layer_id, (ks, vs) in self._state.items():
+        for layer_key, (ks, vs) in self._state.items():
             ks_shape = ks.shape if ks is not None else None
-            layer_reprs.append(f"L{str(layer_id)[-4:]}:(k={ks_shape})")
+            layer_reprs.append(f"L{str(layer_key)[-4:]}:(k={ks_shape})")
         layers_str = ", ".join(layer_reprs)
         return f"KVCache(count={count}, layers=[{layers_str}])"
 
 
 def init_weights(
-    shape: tuple[int, int],
+    shape: tuple[int, ...],
     key: PRNGKeyArray,
     dtype: jax.typing.DTypeLike = "float32",
 ) -> Array:
@@ -130,7 +130,7 @@ def init_weights(
     )
 
 
-def safe_concat(left: Array | None, right: Array, axis: int | None = 0) -> Array:
+def safe_concat(left: Array | None, right: Array) -> Array:
     if left is None:
         return right
-    return jnp.concat([left, right], axis=axis)
+    return jnp.concat([left, right], axis=0)

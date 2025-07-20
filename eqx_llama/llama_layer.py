@@ -28,9 +28,9 @@ class LLaMALayer(eqx.Module):
     def __call__(
         self,
         xs: Float[Array, " seq_len layer_dim"],
-        cache: KVCache,
-        attn_implementation: Literal["xla", "cudnn"] = "xla",
-    ) -> tuple[Float[Array, " seq_len layer_dim"], KVCache]:
+        cache: KVCache | None,
+        attn_implementation: Literal["xla", "cudnn", "pallas"] = "xla",
+    ) -> tuple[Float[Array, " seq_len layer_dim"], KVCache | None]:
         attention_out, cache = self.attention_module(
             xs, cache, attn_implementation=attn_implementation
         )

@@ -1,8 +1,10 @@
+import math
 from typing import Literal
 
 import chex
 import equinox as eqx
 import jax
+import jax.experimental.pallas.ops.gpu.attention as pla
 import jax.numpy as jnp
 from jaxtyping import Array, Float, PRNGKeyArray
 
@@ -15,12 +17,20 @@ from .utils import (
     safe_concat,
 )
 
+# TODO make sure to pad inputs to pallas attention to the nearest power of 2
+
 
 class _AttentionWeights(eqx.Module):
     wq: Array
     wk: Array
     wv: Array
     wo: Array
+
+    def __init__(self, wq, wk, wv, wo):
+        self.wq = wq
+        self.wk = wk
+        self.wv = wv
+        self.wo = wo
 
 
 class AttentionModule(eqx.Module):
@@ -57,7 +67,7 @@ class AttentionModule(eqx.Module):
             init_weights((config.layer_dim, self.num_heads, self.head_dim), k4, dtype),
         )
 
-        self.cache_key = id(self)
+        self.cache_key = str(id(self))
 
     def _compute_embeddings(
         self,
@@ -79,12 +89,14 @@ class AttentionModule(eqx.Module):
     def __call__(
         self,
         xs: Float[Array, " seq_len layer_dim"],
-        cache: KVCache,
-        attn_implementation: Literal["xla", "cudnn"] = "xla",
-    ) -> tuple[Float[Array, " seq_len layer_dim"], KVCache]:
+        cache: KVCache | None,
+        attn_implementation: Literal["xla", "cudnn", "pallas"] = "xla",
+    ) -> tuple[Float[Array, " seq_len layer_dim"], KVCache | None]:
         seq_len = xs.shape[0]
 
-        old_ks, old_vs = cache.get(self.cache_key)
+        old_ks, old_vs = None, None
+        if cache is not None:
+            old_ks, old_vs = cache.get(self.cache_key)
         context_len = old_ks.shape[0] if old_ks is not None else 0
 
         xs_normalized = jax.vmap(self.norm)(xs)
@@ -93,7 +105,8 @@ class AttentionModule(eqx.Module):
         )
 
         ks, vs = safe_concat(old_ks, new_ks), safe_concat(old_vs, new_vs)
-        cache = cache.set(self.cache_key, ks, vs)
+        if cache is not None:
+            cache = cache.set(self.cache_key, ks, vs)
 
         attention_out = compute_self_attention(
             new_qs, ks, vs, attn_implementation=attn_implementation
@@ -117,8 +130,33 @@ def compute_self_attention(
     ks: Float[Array, " context_len+seq_len num_heads head_dim"],
     vs: Float[Array, " context_len+seq_len num_heads head_dim"],
     *,
-    attn_implementation: Literal["xla", "cudnn"] = "xla",
+    attn_implementation: Literal["xla", "cudnn", "pallas"] = "xla",
+    **kwargs,
 ) -> Float[Array, " seq_len num_heads head_dim"]:
+    if attn_implementation == "pallas":
+        return pla.mha(
+            qs[None, ...],
+            ks[None, ...],
+            vs[None, ...],
+            None,
+            sm_scale=1 / math.sqrt(qs.shape[2]),
+            causal=True,
+            # block_sizes: BlockSizes = BlockSizes.get_default(),
+            # backward_pass_impl: str = "triton",
+            # num_warps: int | None = None,
+            # num_stages: int = 2,
+            # grid: tuple[int, ...] | None = None,
+            # interpret: bool = False,
+            # debug: bool = False,
+            # return_residuals: bool = False,
+            **kwargs,
+        )[0, ...]
     return jax.nn.dot_product_attention(
-        qs, ks, vs, is_causal=True, implementation=attn_implementation
+        qs,
+        ks,
+        vs,
+        is_causal=True,
+        implementation=attn_implementation,
+        scale=1 / math.sqrt(qs.shape[2]),
+        **kwargs,
     )
