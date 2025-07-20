@@ -2,11 +2,6 @@
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["eqx_llama*"]
-namespaces = false
-
 [project]
 name = "eqx-llama"
 version = "0.0.1"
