@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 dependencies = [
     "chex>=0.1.89",
     "equinox>=0.12.1",
-    "jax[cuda12]>=0.6.0",
+    "jax>=0.6.0",
     "jaxtyping>=0.3.2",
 ]
 classifiers = [
