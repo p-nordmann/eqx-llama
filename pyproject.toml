@@ -32,6 +32,9 @@ dev = [
     "tqdm>=4.67.1",
 ]
 
+[tool.setuptools]
+packages = ["eqx_llama"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
