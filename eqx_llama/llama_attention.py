@@ -4,11 +4,10 @@ from typing import Literal
 import chex
 import equinox as eqx
 import jax
-import jax.experimental.pallas.ops.gpu.attention as pla
 import jax.numpy as jnp
 from jaxtyping import Array, Float, PRNGKeyArray
 
-from .internals import mha
+from .internals import mha, mha_pallas
 from .utils import (
     KVCache,
     LLaMAConfig,
@@ -137,11 +136,10 @@ def compute_self_attention(
     **kwargs,
 ) -> Float[Array, "seq_len num_heads head_dim"]:
     if attn_implementation == "pallas":
-        return pla.mha(
+        return mha_pallas(
             qs[None, ...],
             ks[None, ...],
             vs[None, ...],
-            None,
             sm_scale=1 / math.sqrt(qs.shape[2]),
             causal=True,
             **kwargs,

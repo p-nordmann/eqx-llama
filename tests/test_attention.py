@@ -74,17 +74,15 @@ def test_pallas_self_attention(attn_inputs):
     assert jnp.allclose(got, want, atol=atol, rtol=rtol)
 
 
-# def test_pallas_self_attention_backward(attn_inputs):
-#     qs, ks, vs = attn_inputs
+def test_pallas_self_attention_backward(attn_inputs):
+    qs, ks, vs = attn_inputs
 
-#     # jit to speed up jacobian; mark string args as static
-#     f = jax.jit(
-#         lambda q, k, v, **kw: compute_self_attention(q, k, v, **kw),
-#         static_argnames=("attn_implementation", "interpret"),
-#     )
-#     out_xla = jax.jacobian(f)(qs, ks, vs, attn_implementation="xla")
-#     out_pallas = jax.jacobian(f)(
-#         qs, ks, vs, attn_implementation="pallas", interpret=True
-#     )
+    def pallas_implementation(qs, ks, vs):
+        return compute_self_attention(
+            qs, ks, vs, attn_implementation="pallas", interpret=True
+        )
 
-#     assert jnp.allclose(out_pallas, out_xla, atol=atol, rtol=rtol)
+    want = jax.jit(jax.jacobian(reference_attention))(qs, ks, vs)
+    got = jax.jit(jax.jacobian(pallas_implementation))(qs, ks, vs)
+
+    assert jnp.allclose(got, want, atol=atol, rtol=rtol)
