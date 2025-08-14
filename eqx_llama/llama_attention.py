@@ -20,6 +20,20 @@ from .utils import (
 # TODO make sure to pad inputs to pallas attention to the nearest power of 2
 
 
+def cache_get(cache: KVCache | None, cache_key: str):
+    if cache is None:
+        return None, None, 0
+    ks, vs = cache.get(cache_key)
+    context_len = ks.shape[0] if ks is not None else 0
+    return ks, vs, context_len
+
+
+def cache_set(cache: KVCache | None, cache_key: str, ks: Array, vs: Array):
+    if cache is None:
+        return None
+    return cache.set(cache_key, ks, vs)
+
+
 class _AttentionWeights(eqx.Module):
     wq: Array
     wk: Array
@@ -71,12 +85,12 @@ class AttentionModule(eqx.Module):
 
     def _compute_embeddings(
         self,
-        xs: Float[Array, " seq_len layer_dim"],
+        xs: Float[Array, "seq_len layer_dim"],
         start_index: int = 0,
     ) -> tuple[
-        Float[Array, " seq_len num_heads head_dim"],
-        Float[Array, " seq_len num_heads head_dim"],
-        Float[Array, " seq_len num_heads head_dim"],
+        Float[Array, "seq_len num_heads head_dim"],
+        Float[Array, "seq_len num_heads head_dim"],
+        Float[Array, "seq_len num_heads head_dim"],
     ]:
         apply_rope = jax.vmap(
             lambda h: apply_rotary_embeddings(h, start_index), in_axes=1, out_axes=1
@@ -88,30 +102,19 @@ class AttentionModule(eqx.Module):
 
     def __call__(
         self,
-        xs: Float[Array, " seq_len layer_dim"],
+        xs: Float[Array, "seq_len layer_dim"],
         cache: KVCache | None,
         attn_implementation: Literal["xla", "cudnn", "pallas"] = "xla",
-    ) -> tuple[Float[Array, " seq_len layer_dim"], KVCache | None]:
+    ) -> tuple[Float[Array, "seq_len layer_dim"], KVCache | None]:
         seq_len = xs.shape[0]
 
-        old_ks, old_vs = None, None
-        if cache is not None:
-            old_ks, old_vs = cache.get(self.cache_key)
-        context_len = old_ks.shape[0] if old_ks is not None else 0
-
-        xs_normalized = jax.vmap(self.norm)(xs)
-        new_qs, new_ks, new_vs = self._compute_embeddings(
-            xs_normalized, start_index=context_len
-        )
-
+        old_ks, old_vs, context_len = cache_get(cache, self.cache_key)
+        new_qs, new_ks, new_vs = self._compute_embeddings(self.norm(xs), context_len)
         ks, vs = safe_concat(old_ks, new_ks), safe_concat(old_vs, new_vs)
-        if cache is not None:
-            cache = cache.set(self.cache_key, ks, vs)
+        cache = cache_set(cache, self.cache_key, ks, vs)
 
-        attention_out = compute_self_attention(
-            new_qs, ks, vs, attn_implementation=attn_implementation
-        )
-        out = jnp.einsum("snh,dnh->sd", attention_out, self.weights.wo)
+        attn_out = compute_self_attention(new_qs, ks, vs, attn_implementation)
+        out = jnp.einsum("snh,dnh->sd", attn_out, self.weights.wo)
 
         if old_ks is not None:
             chex.assert_shape(
@@ -120,19 +123,30 @@ class AttentionModule(eqx.Module):
         chex.assert_shape(
             [new_qs, new_ks, new_vs], (seq_len, self.num_heads, self.head_dim)
         )
-        chex.assert_shape([xs, xs_normalized, out], (seq_len, self.layer_dim))
+        chex.assert_shape([xs, out], (seq_len, self.layer_dim))
 
         return out, cache
 
 
 def compute_self_attention(
-    qs: Float[Array, " seq_len num_heads head_dim"],
-    ks: Float[Array, " context_len+seq_len num_heads head_dim"],
-    vs: Float[Array, " context_len+seq_len num_heads head_dim"],
-    *,
+    qs: Float[Array, "seq_len num_heads head_dim"],
+    ks: Float[Array, "context_len+seq_len num_heads head_dim"],
+    vs: Float[Array, "context_len+seq_len num_heads head_dim"],
     attn_implementation: Literal["xla", "cudnn", "pallas"] = "xla",
     **kwargs,
-) -> Float[Array, " seq_len num_heads head_dim"]:
+) -> Float[Array, "seq_len num_heads head_dim"]:
+    # The causal flag in attention implementations does not
+    # take into account the case where S and T are not the same.
+    # We need to use a mask to take it into account.
+    q_len = qs.shape[0]
+    kv_len = ks.shape[0]
+    context_len = kv_len - q_len
+    q_indices = jnp.arange(q_len) + context_len
+    k_indices = jnp.arange(kv_len)
+
+    # We only want the queries to attend in the past.
+    causal_mask = k_indices <= q_indices[:, None]
+
     if attn_implementation == "pallas":
         return pla.mha(
             qs[None, ...],
@@ -141,21 +155,15 @@ def compute_self_attention(
             None,
             sm_scale=1 / math.sqrt(qs.shape[2]),
             causal=True,
-            # block_sizes: BlockSizes = BlockSizes.get_default(),
-            # backward_pass_impl: str = "triton",
-            # num_warps: int | None = None,
-            # num_stages: int = 2,
-            # grid: tuple[int, ...] | None = None,
-            # interpret: bool = False,
-            # debug: bool = False,
-            # return_residuals: bool = False,
             **kwargs,
         )[0, ...]
+
     return jax.nn.dot_product_attention(
         qs,
         ks,
         vs,
-        is_causal=True,
+        is_causal=False,
+        mask=causal_mask,
         implementation=attn_implementation,
         scale=1 / math.sqrt(qs.shape[2]),
         **kwargs,
