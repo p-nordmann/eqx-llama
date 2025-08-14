@@ -34,7 +34,7 @@ class LLaMA(eqx.Module):
         self,
         tokens: Integer[Array, " seq_len"],
         cache: KVCache | None = None,
-        attn_implementation: Literal["xla", "cudnn", "pallas"] = "xla",
+        attn_implementation: Literal["pallas", "regular"] = "regular",
     ) -> tuple[Float[Array, " seq_len vocab_size"], KVCache | None]:
         xs = jax.vmap(self.embeddings)(tokens)
 

@@ -8,6 +8,7 @@ import jax.experimental.pallas.ops.gpu.attention as pla
 import jax.numpy as jnp
 from jaxtyping import Array, Float, PRNGKeyArray
 
+from .internals import mha
 from .utils import (
     KVCache,
     LLaMAConfig,
@@ -104,7 +105,7 @@ class AttentionModule(eqx.Module):
         self,
         xs: Float[Array, "seq_len layer_dim"],
         cache: KVCache | None,
-        attn_implementation: Literal["xla", "cudnn", "pallas"] = "xla",
+        attn_implementation: Literal["pallas", "regular"] = "regular",
     ) -> tuple[Float[Array, "seq_len layer_dim"], KVCache | None]:
         seq_len = xs.shape[0]
 
@@ -132,21 +133,9 @@ def compute_self_attention(
     qs: Float[Array, "seq_len num_heads head_dim"],
     ks: Float[Array, "context_len+seq_len num_heads head_dim"],
     vs: Float[Array, "context_len+seq_len num_heads head_dim"],
-    attn_implementation: Literal["xla", "cudnn", "pallas"] = "xla",
+    attn_implementation: Literal["pallas", "regular"] = "regular",
     **kwargs,
 ) -> Float[Array, "seq_len num_heads head_dim"]:
-    # The causal flag in attention implementations does not
-    # take into account the case where S and T are not the same.
-    # We need to use a mask to take it into account.
-    q_len = qs.shape[0]
-    kv_len = ks.shape[0]
-    context_len = kv_len - q_len
-    q_indices = jnp.arange(q_len) + context_len
-    k_indices = jnp.arange(kv_len)
-
-    # We only want the queries to attend in the past.
-    causal_mask = k_indices <= q_indices[:, None]
-
     if attn_implementation == "pallas":
         return pla.mha(
             qs[None, ...],
@@ -158,13 +147,13 @@ def compute_self_attention(
             **kwargs,
         )[0, ...]
 
-    return jax.nn.dot_product_attention(
-        qs,
-        ks,
-        vs,
-        is_causal=False,
-        mask=causal_mask,
-        implementation=attn_implementation,
-        scale=1 / math.sqrt(qs.shape[2]),
-        **kwargs,
-    )
+    if attn_implementation == "regular":
+        return mha(
+            qs[None, ...],
+            ks[None, ...],
+            vs[None, ...],
+            sm_scale=1 / math.sqrt(qs.shape[2]),
+            causal=True,
+        )[0, ...]
+
+    raise ValueError(f"Unexpected attention implementation '{attn_implementation}'")
