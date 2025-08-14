@@ -36,46 +36,32 @@ class RMSLayerNorm(eqx.Module):
         return (self.weight * x_normed).astype(x.dtype)
 
 
-# def rotary_kernel(x: Float32[Array, " 2"], m_theta: float) -> Float32[Array, " 2"]:
-def rotary_kernel(x, m_theta):
-    """The core operation of rotary embeddings acts over two dimensions."""
-    theta_kernel = jnp.array(
-        [
-            [jnp.cos(m_theta), -jnp.sin(m_theta)],
-            [jnp.sin(m_theta), jnp.cos(m_theta)],
-        ]
-    )
-    return theta_kernel.astype(x.dtype) @ x
-
-
-# def generalized_rotary_kernel(
-#     x: Float32[Array, " size"], m: Float32, thetas: Float32[Array, " half_size"]
-# ) -> Float32[Array, " half_size"]:
-def generalized_rotary_kernel(x, m, thetas):
-    """Applies the rotary kernel along a vector of even dimension.
-
-    Thetas must be provided.
-    """
-    pairs_of_xi = jnp.reshape(
-        x,
-        shape=(-1, 2),
-        order="C",  # Order is critical to be consistent with the original LLaMAs!
-    )
-    pairs_of_embeddings = jax.vmap(rotary_kernel)(pairs_of_xi, m * thetas)
-    return jax.lax.collapse(pairs_of_embeddings, 0, 2)
-
-
 def apply_rotary_embeddings(
-    xs: Float[Array, " seq_len size"],
-    start_index: int = 0,
-    *,
-    theta_base: float = 1e4,
-) -> Float[Array, " seq_len size"]:
-    """Applies the rotary kernel through a full sequence with even dimension."""
-    half_dim = xs.shape[1] // 2
-    ms = start_index + jnp.arange(xs.shape[0])
-    thetas = theta_base ** (-jnp.arange(0, half_dim) / half_dim)
-    return jax.vmap(generalized_rotary_kernel, in_axes=[0, 0, None])(xs, ms, thetas)
+    xs: Float[Array, "... seq_len head_dim"], start_idx: int = 0, theta: float = 1e4
+):
+    # Get the sequence length and head dimension from the input tensor.
+    seq_len, head_dim = xs.shape[-2], xs.shape[-1]
+    half_dim = head_dim // 2
+
+    inv_freq = theta ** (-jnp.arange(0, half_dim) / half_dim)
+    ms = start_idx + jnp.arange(seq_len, dtype=inv_freq.dtype)
+    freqs = jnp.outer(ms, inv_freq)
+
+    broadcast_dims = (1,) * (xs.ndim - 2)
+    cos_freqs = jnp.cos(freqs).reshape(*broadcast_dims, seq_len, -1)
+    sin_freqs = jnp.sin(freqs).reshape(*broadcast_dims, seq_len, -1)
+
+    x1 = xs[..., ::2]  # Even-indexed features
+    x2 = xs[..., 1::2]  # Odd-indexed features
+
+    rotated_x1 = x1 * cos_freqs - x2 * sin_freqs
+    rotated_x2 = x1 * sin_freqs + x2 * cos_freqs
+
+    xs_rotated = jnp.empty_like(xs)
+    xs_rotated = xs_rotated.at[..., ::2].set(rotated_x1)
+    xs_rotated = xs_rotated.at[..., 1::2].set(rotated_x2)
+
+    return xs_rotated
 
 
 LayerKVCache: TypeAlias = Tuple[Optional[jax.Array], Optional[jax.Array]]
