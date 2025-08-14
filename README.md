@@ -47,9 +47,7 @@ If you have a question or issues, please do not hesitate to open an issue, I'll 
 
 At the moment, I noticed the following issues:
 
-- Issue with the cudnn attention implementation.
 - Issue with the pallas attention implementation when using shapes with dimensions that are not powers of 2.
-- KVCache is not very well tested.
 
 ## License
 
