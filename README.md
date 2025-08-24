@@ -47,7 +47,7 @@ If you have a question or issues, please do not hesitate to open an issue, I'll 
 
 At the moment, I noticed the following issues:
 
-- Issue with the pallas attention implementation when using shapes with dimensions that are not powers of 2.
+- Issue with the pallas attention implementation when using shapes with dimensions that are not powers of 2. The attention routine will fall back to the regular implementation if its inputs are not eligible for the pallas implementation.
 
 ## License
 
