@@ -106,13 +106,13 @@ class AttentionModule(eqx.Module):
         xs: Float[Array, "seq_len layer_dim"],
         cache: KVCache | None,
         attn_implementation: Literal["pallas", "regular"] = "regular",
-    ) -> tuple[Float[Array, "seq_len layer_dim"], KVCache | None]:
+    ) -> Float[Array, "seq_len layer_dim"]:
         seq_len = xs.shape[0]
 
         old_ks, old_vs, context_len = cache_get(cache, self.cache_key)
         new_qs, new_ks, new_vs = self._compute_embeddings(self.norm(xs), context_len)
         ks, vs = safe_concat(old_ks, new_ks), safe_concat(old_vs, new_vs)
-        cache = cache_set(cache, self.cache_key, ks, vs)
+        cache_set(cache, self.cache_key, ks, vs)
 
         attn_out = compute_self_attention_padded(new_qs, ks, vs, attn_implementation)
         out = jnp.einsum("snh,dnh->sd", attn_out, self.weights.wo)
@@ -126,7 +126,7 @@ class AttentionModule(eqx.Module):
         )
         chex.assert_shape([xs, out], (seq_len, self.layer_dim))
 
-        return out, cache
+        return out
 
 
 def _next_pow2(n: int) -> int:

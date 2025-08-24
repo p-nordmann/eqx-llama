@@ -79,9 +79,9 @@ class KVCache:
         """Gets the cache tuple (k, v) for a layer, returning (None, None) if absent."""
         return self._state.get(layer_key, (None, None))
 
-    def set(self, layer_key: str, ks: jax.Array, vs: jax.Array) -> "KVCache":
+    def set(self, layer_key: str, ks: jax.Array, vs: jax.Array) -> None:
         """Updates the cache."""
-        return KVCache(self._state | {layer_key: (ks, vs)})
+        self._state |= {layer_key: (ks, vs)}
 
     def tree_flatten(self):
         children = list(self._state.values())

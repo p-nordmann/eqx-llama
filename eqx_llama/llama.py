@@ -11,8 +11,8 @@ from .utils import KVCache, LLaMAConfig
 
 
 class LLaMALayer(eqx.Module):
-    attention_module: AttentionModule
-    feed_forward_module: FeedForwardModule
+    attn: AttentionModule
+    ffn: FeedForwardModule
 
     def __init__(
         self,
@@ -22,8 +22,8 @@ class LLaMALayer(eqx.Module):
         dtype: jax.typing.DTypeLike = "float32",
     ):
         k1, k2, key = jax.random.split(key, 3)
-        self.attention_module = AttentionModule(config, key=k1, dtype=dtype)
-        self.feed_forward_module = FeedForwardModule(config, key=k2, dtype=dtype)
+        self.attn = AttentionModule(config, key=k1, dtype=dtype)
+        self.ffn = FeedForwardModule(config, key=k2, dtype=dtype)
 
 
 class LLaMA(eqx.Module):
@@ -56,11 +56,8 @@ class LLaMA(eqx.Module):
         xs = jax.vmap(self.embeddings)(tokens)
 
         for layer in self.layers:
-            attention_out, cache = layer.attention_module(
-                xs, cache, attn_implementation=attn_implementation
-            )
-            xs = xs + attention_out
-            xs = xs + layer.feed_forward_module(xs)
+            xs = xs + layer.attn(xs, cache, attn_implementation)
+            xs = xs + layer.ffn(xs)
 
         out = jax.vmap(self.head, in_axes=(0))(xs)
 

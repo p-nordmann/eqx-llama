@@ -44,11 +44,11 @@ def test_attention_module_with_cache():
     attn = AttentionModule(mini_config, key=k1)
     xs = jax.random.normal(k2, (2, mini_config.layer_dim))
 
-    want, _ = attn(xs, None)
+    want = attn(xs, None)
 
     cache = KVCache()
-    out_1, cache = attn(xs[:1], cache)
-    out_2, cache = attn(xs[1:2], cache)
+    out_1 = attn(xs[:1], cache)
+    out_2 = attn(xs[1:2], cache)
     got = jnp.concat([out_1, out_2], axis=0)
 
     assert jnp.allclose(got, want, rtol=rtol, atol=atol)
