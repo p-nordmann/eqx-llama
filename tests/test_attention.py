@@ -1,4 +1,3 @@
-# Four combinations: q_len pow2/non, k_len pow2/non
 import math
 
 import jax
@@ -54,6 +53,9 @@ def reference_attention(qs, ks, vs):
     )
 
 
+@pytest.mark.cpu
+@pytest.mark.gpu
+@pytest.mark.tpu
 def test_regular_self_attention(attn_inputs):
     qs, ks, vs = attn_inputs
 
@@ -63,7 +65,8 @@ def test_regular_self_attention(attn_inputs):
     assert jnp.allclose(got, want, atol=atol, rtol=rtol)
 
 
-def test_pallas_self_attention(attn_inputs):
+@pytest.mark.cpu
+def test_pallas_self_attention_cpu(attn_inputs):
     qs, ks, vs = attn_inputs
 
     want = reference_attention(qs, ks, vs)
@@ -74,7 +77,8 @@ def test_pallas_self_attention(attn_inputs):
     assert jnp.allclose(got, want, atol=atol, rtol=rtol)
 
 
-def test_pallas_self_attention_backward(attn_inputs):
+@pytest.mark.cpu
+def test_pallas_self_attention_backward_cpu(attn_inputs):
     qs, ks, vs = attn_inputs
 
     def pallas_implementation(qs, ks, vs):
@@ -85,4 +89,29 @@ def test_pallas_self_attention_backward(attn_inputs):
     want = jax.jit(jax.jacobian(reference_attention))(qs, ks, vs)
     got = jax.jit(jax.jacobian(pallas_implementation))(qs, ks, vs)
 
+    assert jnp.allclose(got, want, atol=atol, rtol=rtol)
+
+
+@pytest.mark.gpu
+def test_pallas_self_attention_gpu(attn_inputs):
+    qs, ks, vs = attn_inputs
+
+    want = reference_attention(qs, ks, vs)
+    got = compute_self_attention(qs, ks, vs, attn_implementation="pallas")
+
+    # atol, rtol = 1e-2, 1e-2
+    assert jnp.allclose(got, want, atol=atol, rtol=rtol)
+
+
+@pytest.mark.gpu
+def test_pallas_self_attention_backward_gpu(attn_inputs):
+    qs, ks, vs = attn_inputs
+
+    def pallas_implementation(qs, ks, vs):
+        return compute_self_attention(qs, ks, vs, attn_implementation="pallas")
+
+    want = jax.jit(jax.jacobian(reference_attention))(qs, ks, vs)
+    got = jax.jit(jax.jacobian(pallas_implementation))(qs, ks, vs)
+
+    # atol, rtol = 1e-2, 1e-2
     assert jnp.allclose(got, want, atol=atol, rtol=rtol)

@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import pytest
 
 from eqx_llama import KVCache, LLaMA, LLaMAConfig
 from eqx_llama.llama_attention import AttentionModule
@@ -19,6 +20,9 @@ key = jax.random.PRNGKey(1)
 key, k1, k2 = jax.random.split(key, 3)
 
 
+@pytest.mark.cpu
+@pytest.mark.gpu
+@pytest.mark.tpu
 def test_full_llama_with_cache():
     model = LLaMA(config=mini_config, key=k1)
     tokens = jax.random.randint(k2, (2,), 0, mini_config.vocab_size)
@@ -33,6 +37,9 @@ def test_full_llama_with_cache():
     assert jnp.allclose(got, want, rtol=rtol, atol=atol)
 
 
+@pytest.mark.cpu
+@pytest.mark.gpu
+@pytest.mark.tpu
 def test_attention_module_with_cache():
     attn = AttentionModule(mini_config, key=k1)
     xs = jax.random.normal(k2, (2, mini_config.layer_dim))

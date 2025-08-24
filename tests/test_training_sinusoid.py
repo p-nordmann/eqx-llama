@@ -2,6 +2,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 import optax
+import pytest
 
 from eqx_llama import KVCache, LLaMA, LLaMAConfig
 
@@ -43,6 +44,9 @@ def make_epoch(data, window_size, batch_size, *, key):
         yield batch
 
 
+@pytest.mark.cpu
+@pytest.mark.gpu
+@pytest.mark.tpu
 def test_training_sinusoid():
     """Training on a sinusoid to make sure it learns something."""
 

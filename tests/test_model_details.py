@@ -1,11 +1,15 @@
 import jax
 import jax.numpy as jnp
+import pytest
 
 from eqx_llama.utils import RMSLayerNorm, apply_rotary_embeddings
 
 atol, rtol = 1e-4, 1e-4
 
 
+@pytest.mark.cpu
+@pytest.mark.gpu
+@pytest.mark.tpu
 def test_rms_layernorm():
     norm = RMSLayerNorm(10)
     x = jnp.reshape(jnp.arange(0, 20, dtype=jnp.float32), shape=(2, 10))
@@ -14,6 +18,9 @@ def test_rms_layernorm():
     assert jnp.allclose(got, want, atol=atol, rtol=rtol)
 
 
+@pytest.mark.cpu
+@pytest.mark.gpu
+@pytest.mark.tpu
 def test_apply_rotary_embeddings():
     # Two dimensional rotary embeddings are simple.
     got = apply_rotary_embeddings(
@@ -53,6 +60,9 @@ def test_apply_rotary_embeddings():
     assert jnp.allclose(got, want, atol=atol, rtol=rtol)
 
 
+@pytest.mark.cpu
+@pytest.mark.gpu
+@pytest.mark.tpu
 def test_apply_rotary_embeddings_with_start_index():
     key = jax.random.PRNGKey(0)
     xs = jax.random.normal(key, (128, 16))
