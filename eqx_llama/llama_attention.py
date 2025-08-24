@@ -1,4 +1,5 @@
 import math
+import warnings
 from typing import Literal
 
 import chex
@@ -113,7 +114,7 @@ class AttentionModule(eqx.Module):
         ks, vs = safe_concat(old_ks, new_ks), safe_concat(old_vs, new_vs)
         cache = cache_set(cache, self.cache_key, ks, vs)
 
-        attn_out = compute_self_attention(new_qs, ks, vs, attn_implementation)
+        attn_out = compute_self_attention_padded(new_qs, ks, vs, attn_implementation)
         out = jnp.einsum("snh,dnh->sd", attn_out, self.weights.wo)
 
         if old_ks is not None:
@@ -128,6 +129,85 @@ class AttentionModule(eqx.Module):
         return out, cache
 
 
+def _next_pow2(n: int) -> int:
+    if n <= 1:
+        return 1
+    return 1 << (n - 1).bit_length()
+
+
+def _pallas_eligible(qs, ks, vs) -> bool:
+    min_pallas_dim = 16
+
+    def is_eligible(n):
+        target_n = _next_pow2(n)
+        return n == target_n and target_n >= min_pallas_dim
+
+    return all(is_eligible(dim) for dim in [*qs.shape, *ks.shape, *vs.shape])
+
+
+def compute_self_attention_padded(
+    qs: Float[Array, "seq_len num_heads head_dim"],
+    ks: Float[Array, "kv_len num_heads head_dim"],
+    vs: Float[Array, "kv_len num_heads head_dim"],
+    attn_implementation: Literal["pallas", "regular"] = "regular",
+    **kwargs,
+) -> Float[Array, "seq_len num_heads head_dim"]:
+    if attn_implementation == "pallas" and not _pallas_eligible(qs, ks, vs):
+        warnings.warn(
+            "Falling back to regular attention because one or more "
+            f"dimensions are not eligible for pallas implementation "
+            f"qs={qs.shape}, ks={ks.shape}, vs={vs.shape}"
+        )
+        return compute_self_attention(
+            qs=qs,
+            ks=ks,
+            vs=vs,
+            attn_implementation="regular",
+            **kwargs,
+        )
+
+    if attn_implementation == "regular":
+        return compute_self_attention(
+            qs=qs,
+            ks=ks,
+            vs=vs,
+            attn_implementation="regular",
+            **kwargs,
+        )
+
+    # Using pallas attention.
+    # Pad the sequences to the nearest power of 2.
+    # TODO there is an issue where we attend to the padded tokens
+
+    q_len = qs.shape[0]
+    target_q_len = _next_pow2(q_len)
+    if target_q_len != q_len:
+        qs = jnp.pad(
+            qs,
+            ((0, target_q_len - q_len), (0, 0), (0, 0)),
+            mode="constant",
+            constant_values=0,
+        )
+
+    kv_len = ks.shape[0]
+    target_kv_len = _next_pow2(kv_len)
+    if target_kv_len != kv_len:
+        pad_spec = ((0, target_kv_len - kv_len), (0, 0), (0, 0))
+        ks = jnp.pad(ks, pad_spec, mode="constant", constant_values=0)
+        vs = jnp.pad(vs, pad_spec, mode="constant", constant_values=0)
+
+    out = compute_self_attention(
+        qs=qs,
+        ks=ks,
+        vs=vs,
+        attn_implementation=attn_implementation,
+        **kwargs,
+    )
+
+    # Slice back to real queries
+    return out[:q_len, :, :]
+
+
 def compute_self_attention(
     qs: Float[Array, "seq_len num_heads head_dim"],
     ks: Float[Array, "context_len+seq_len num_heads head_dim"],
@@ -135,6 +215,10 @@ def compute_self_attention(
     attn_implementation: Literal["pallas", "regular"] = "regular",
     **kwargs,
 ) -> Float[Array, "seq_len num_heads head_dim"]:
+    assert ks.shape[0] >= qs.shape[0], (
+        "kv sequence must be at least as long as q sequence"
+    )
+
     if attn_implementation == "pallas":
         return mha_pallas(
             qs[None, ...],

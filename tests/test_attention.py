@@ -4,7 +4,10 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from eqx_llama.llama_attention import compute_self_attention
+from eqx_llama.llama_attention import (
+    compute_self_attention,
+    compute_self_attention_padded,
+)
 
 atol, rtol = 1e-6, 1e-6
 
@@ -18,6 +21,24 @@ atol, rtol = 1e-6, 1e-6
     ]
 )
 def attn_inputs(request):
+    q_shape, kv_shape = request.param
+    key = jax.random.PRNGKey(0)
+    kq, kk = jax.random.split(key)
+    qs = jax.random.normal(kq, q_shape)
+    ks = jax.random.normal(kk, kv_shape)
+    vs = jax.random.normal(kk, kv_shape)
+    return qs, ks, vs
+
+
+@pytest.fixture(
+    params=[
+        ((16, 16, 16), (16, 16, 16)),
+        ((16, 16, 16), (31, 16, 16)),
+        ((13, 16, 16), (16, 16, 16)),
+        ((13, 16, 16), (31, 16, 16)),
+    ]
+)
+def pallas_attn_inputs(request):
     q_shape, kv_shape = request.param
     key = jax.random.PRNGKey(0)
     kq, kk = jax.random.split(key)
@@ -93,25 +114,27 @@ def test_pallas_self_attention_backward_cpu(attn_inputs):
 
 
 @pytest.mark.gpu
-def test_pallas_self_attention_gpu(attn_inputs):
-    qs, ks, vs = attn_inputs
+def test_pallas_self_attention_gpu(pallas_attn_inputs):
+    qs, ks, vs = pallas_attn_inputs
 
     want = reference_attention(qs, ks, vs)
-    got = compute_self_attention(qs, ks, vs, attn_implementation="pallas")
+    got = compute_self_attention_padded(qs, ks, vs, attn_implementation="pallas")
 
-    # atol, rtol = 1e-2, 1e-2
-    assert jnp.allclose(got, want, atol=atol, rtol=rtol)
+    atol = 1e-3
+    assert jnp.allclose(got, want, atol=atol, rtol=rtol), (
+        f"diff={jnp.linalg.norm(got - want) / jnp.linalg.norm(want)}"
+    )
 
 
 @pytest.mark.gpu
-def test_pallas_self_attention_backward_gpu(attn_inputs):
-    qs, ks, vs = attn_inputs
+def test_pallas_self_attention_backward_gpu(pallas_attn_inputs):
+    qs, ks, vs = pallas_attn_inputs
 
     def pallas_implementation(qs, ks, vs):
-        return compute_self_attention(qs, ks, vs, attn_implementation="pallas")
+        return compute_self_attention_padded(qs, ks, vs, attn_implementation="pallas")
 
     want = jax.jit(jax.jacobian(reference_attention))(qs, ks, vs)
     got = jax.jit(jax.jacobian(pallas_implementation))(qs, ks, vs)
 
-    # atol, rtol = 1e-2, 1e-2
+    atol = 1e-3
     assert jnp.allclose(got, want, atol=atol, rtol=rtol)
