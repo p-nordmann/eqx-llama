@@ -22,22 +22,8 @@ class LLaMALayer(eqx.Module):
         dtype: jax.typing.DTypeLike = "float32",
     ):
         k1, k2, key = jax.random.split(key, 3)
-
         self.attention_module = AttentionModule(config, key=k1, dtype=dtype)
         self.feed_forward_module = FeedForwardModule(config, key=k2, dtype=dtype)
-
-    def __call__(
-        self,
-        xs: Float[Array, " seq_len layer_dim"],
-        cache: KVCache | None,
-        attn_implementation: Literal["pallas", "regular"] = "regular",
-    ) -> tuple[Float[Array, " seq_len layer_dim"], KVCache | None]:
-        attention_out, cache = self.attention_module(
-            xs, cache, attn_implementation=attn_implementation
-        )
-        xs = xs + attention_out
-        xs = xs + self.feed_forward_module(xs)
-        return xs, cache
 
 
 class LLaMA(eqx.Module):
@@ -70,7 +56,11 @@ class LLaMA(eqx.Module):
         xs = jax.vmap(self.embeddings)(tokens)
 
         for layer in self.layers:
-            xs, cache = layer(xs, cache, attn_implementation=attn_implementation)
+            attention_out, cache = layer.attention_module(
+                xs, cache, attn_implementation=attn_implementation
+            )
+            xs = xs + attention_out
+            xs = xs + layer.feed_forward_module(xs)
 
         out = jax.vmap(self.head, in_axes=(0))(xs)
 
