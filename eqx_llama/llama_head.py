@@ -30,12 +30,12 @@ class LLaMAHead(eqx.Module):
 
     def __call__(
         self,
-        x: Float[Array, " layer_dim"],
-    ) -> Float[Array, " vocab_size"]:
+        x: Float[Array, "... layer_dim"],
+    ) -> Float[Array, "vocab_size"]:
         x_normalized = self.norm(x)
         out = x_normalized @ self.weights
 
-        chex.assert_shape([x, x_normalized], (self.layer_dim,))
-        chex.assert_shape([out], (self.vocab_size,))
+        chex.assert_axis_dimension(x, -1, self.layer_dim)
+        chex.assert_axis_dimension(out, -1, self.vocab_size)
 
         return out

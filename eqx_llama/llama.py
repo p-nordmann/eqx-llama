@@ -47,18 +47,21 @@ class LLaMA(eqx.Module):
         key, *ks = jax.random.split(key, config.num_layers + 1)
         self.layers = [LLaMALayer(config, key=k, dtype=dtype) for k in ks]
 
+    def embed(self, tokens):
+        return jax.vmap(self.embeddings)(tokens)
+
     def __call__(
         self,
         tokens: Integer[Array, " seq_len"],
         cache: KVCache | None = None,
         attn_implementation: Literal["pallas", "regular"] = "regular",
     ) -> tuple[Float[Array, " seq_len vocab_size"], KVCache | None]:
-        xs = jax.vmap(self.embeddings)(tokens)
+        xs = self.embed(tokens)
 
         for layer in self.layers:
             xs = xs + layer.attn(xs, cache, attn_implementation)
             xs = xs + layer.ffn(xs)
 
-        out = jax.vmap(self.head, in_axes=(0))(xs)
+        out = self.head(xs)
 
         return out, cache
