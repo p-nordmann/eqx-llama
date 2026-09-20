@@ -39,19 +39,20 @@ class FeedForwardModule(eqx.Module):
         self.feed_forward_dim = config.feed_forward_dim
 
     def __call__(
-        self, xs: Float[Array, " seq_len layer_dim"]
-    ) -> Float[Array, " seq_len layer_dim"]:
-        seq_len = xs.shape[0]
+        self, xs: Float[Array, " batch seq_len layer_dim"]
+    ) -> Float[Array, " batch seq_len layer_dim"]:
+        batch, seq_len, layer_dim = xs.shape
 
-        xs_normalized = jax.vmap(self.norm)(xs)
+        xs_normalized = self.norm(xs)
         hidden_1 = xs_normalized @ self.weights_in_1
         hidden_2 = xs_normalized @ self.weights_in_2
         hidden_after_swiglu = swiglu(hidden_1, hidden_2)
         out = hidden_after_swiglu @ self.weights_out
 
-        chex.assert_shape([xs, xs_normalized, out], (seq_len, self.layer_dim))
+        chex.assert_shape([xs, xs_normalized, out], (batch, seq_len, layer_dim))
         chex.assert_shape(
-            [hidden_1, hidden_2, hidden_after_swiglu], (seq_len, self.feed_forward_dim)
+            [hidden_1, hidden_2, hidden_after_swiglu],
+            (batch, seq_len, self.feed_forward_dim),
         )
 
         return out

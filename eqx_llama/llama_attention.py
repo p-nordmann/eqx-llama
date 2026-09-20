@@ -69,28 +69,32 @@ class AttentionModule(eqx.Module):
 
     def _compute_embeddings(
         self,
-        xs: Float[Array, "seq_len layer_dim"],
+        xs: Float[Array, "batch seq_len layer_dim"],
         start_index: int = 0,
     ) -> tuple[
-        Float[Array, "seq_len num_heads head_dim"],
-        Float[Array, "seq_len num_heads head_dim"],
-        Float[Array, "seq_len num_heads head_dim"],
+        Float[Array, "batch seq_len num_heads head_dim"],
+        Float[Array, "batch seq_len num_heads head_dim"],
+        Float[Array, "batch seq_len num_heads head_dim"],
     ]:
-        apply_rope = jax.vmap(
-            lambda h: apply_rotary_embeddings(h, start_index), in_axes=1, out_axes=1
-        )
-        qs = apply_rope(jnp.einsum("sd,dnh->snh", xs, self.weights.wq))
-        ks = apply_rope(jnp.einsum("sd,dnh->snh", xs, self.weights.wk))
-        vs = jnp.einsum("sd,dnh->snh", xs, self.weights.wv)
+        qs = jnp.einsum("bsd,dnh->bsnh", xs, self.weights.wq)
+        ks = jnp.einsum("bsd,dnh->bsnh", xs, self.weights.wk)
+        vs = jnp.einsum("bsd,dnh->bsnh", xs, self.weights.wv)
+
+        # [B, S, N, H] -> [B, N, S, H]
+        #
+        # apply_rotary_embeddings expects its final two dimensions to be [sequence, head_dim].
+        qs = apply_rotary_embeddings(qs.swapaxes(1, 2), start_index).swapaxes(1, 2)
+        ks = apply_rotary_embeddings(ks.swapaxes(1, 2), start_index).swapaxes(1, 2)
+
         return qs, ks, vs
 
     def __call__(
         self,
-        xs: Float[Array, "seq_len layer_dim"],
+        xs: Float[Array, "batch seq_len layer_dim"],
         cache: KVCache | None,
         attn_implementation: Literal["cudnn", "regular"] = "regular",
-    ) -> Float[Array, "seq_len layer_dim"]:
-        seq_len = xs.shape[0]
+    ) -> Float[Array, "batch seq_len layer_dim"]:
+        batch, seq_len, layer_dim = xs.shape
 
         # -----------------------------
         # Normal training path
@@ -100,7 +104,7 @@ class AttentionModule(eqx.Module):
                 self.norm(xs),
                 start_index=0,
             )
-            attn_out = compute_self_attention_padded(
+            attn_out = compute_self_attention(
                 qs,
                 ks,
                 vs,
@@ -146,14 +150,14 @@ class AttentionModule(eqx.Module):
                 # We already have exactly the K/V we need here.
                 #
                 # Deliberately only supporting one-shot prefill for now.
-                attn_out = compute_self_attention_padded(
+                attn_out = compute_self_attention(
                     qs,
                     new_ks,
                     new_vs,
                     attn_implementation,
                 )
 
-        out = jnp.einsum("snh,dnh->sd", attn_out, self.weights.wo)
+        out = jnp.einsum("bsnh,dnh->bsd", attn_out, self.weights.wo)
 
         return out, cache
 
@@ -164,55 +168,28 @@ def _next_pow2(n: int) -> int:
     return 1 << (n - 1).bit_length()
 
 
-def compute_self_attention_padded(
-    qs: Float[Array, "seq_len num_heads head_dim"],
-    ks: Float[Array, "kv_len num_heads head_dim"],
-    vs: Float[Array, "kv_len num_heads head_dim"],
-    attn_implementation: Literal["cudnn", "regular"] = "regular",
-    **kwargs,
-) -> Float[Array, "seq_len num_heads head_dim"]:
-    return compute_self_attention(
-        qs=qs,
-        ks=ks,
-        vs=vs,
-        attn_implementation=attn_implementation,
-        **kwargs,
-    )
-
-
 def compute_self_attention(
-    qs: Float[Array, "seq_len num_heads head_dim"],
-    ks: Float[Array, "context_len+seq_len num_heads head_dim"],
-    vs: Float[Array, "context_len+seq_len num_heads head_dim"],
+    qs: Float[Array, "batch seq_len num_heads head_dim"],
+    ks: Float[Array, "batch context_len+seq_len num_heads head_dim"],
+    vs: Float[Array, "batch context_len+seq_len num_heads head_dim"],
     attn_implementation: Literal["cudnn", "regular"] = "regular",
     **kwargs,
 ) -> Float[Array, "seq_len num_heads head_dim"]:
-    assert ks.shape[0] >= qs.shape[0], (
+    assert ks.shape[1] >= qs.shape[1], (
         "kv sequence must be at least as long as q sequence"
     )
 
     if attn_implementation == "cudnn":
-        if qs.shape[0] != ks.shape[0]:
+        if qs.shape[1] != ks.shape[1]:
             raise ValueError(
                 "cudnn attention is currently enabled only for "
                 "full-sequence attention; use regular for cached decoding"
             )
-        return mha_cudnn(
-            qs[None, ...],
-            ks[None, ...],
-            vs[None, ...],
-            sm_scale=1 / math.sqrt(qs.shape[2]),
-            causal=True,
-        )[0]
+        return mha_cudnn(qs, ks, vs, causal=True)
 
     if attn_implementation == "regular":
-        return mha(
-            qs[None, ...],
-            ks[None, ...],
-            vs[None, ...],
-            sm_scale=1 / math.sqrt(qs.shape[2]),
-            causal=True,
-        )[0, ...]
+        sm_scale = 1 / math.sqrt(qs.shape[-1])
+        return mha(qs, ks, vs, sm_scale=sm_scale, causal=True)
 
     raise ValueError(f"Unexpected attention implementation '{attn_implementation}'")
 
@@ -231,9 +208,9 @@ def cached_decode_attention(
     vs = vs.astype(jnp.bfloat16)
 
     out = jax.nn.dot_product_attention(
-        qs[None],
-        ks[None],
-        vs[None],
+        qs,
+        ks,
+        vs,
         # q_len == 1, so all valid keys are causal.
         is_causal=False,
         query_seq_lengths=jnp.ones(
@@ -247,4 +224,4 @@ def cached_decode_attention(
         implementation="cudnn",
     )
 
-    return out[0].astype(output_dtype)
+    return out.astype(output_dtype)

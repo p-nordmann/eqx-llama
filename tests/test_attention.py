@@ -4,10 +4,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from eqx_llama.llama_attention import (
-    compute_self_attention,
-    compute_self_attention_padded,
-)
+from eqx_llama.llama_attention import compute_self_attention
 
 atol, rtol = 1e-6, 1e-6
 
@@ -81,6 +78,8 @@ def test_regular_self_attention(attn_inputs):
     qs, ks, vs = attn_inputs
 
     want = reference_attention(qs, ks, vs)
-    got = compute_self_attention(qs, ks, vs, attn_implementation="regular")
+    got = compute_self_attention(
+        qs[None], ks[None], vs[None], attn_implementation="regular"
+    )
 
     assert jnp.allclose(got, want, atol=atol, rtol=rtol)

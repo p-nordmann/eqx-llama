@@ -8,7 +8,7 @@ from eqx_llama import LLaMA, LLaMAConfig
 
 
 def compute_loss(model, inputs):
-    outputs, _ = jax.vmap(model)(inputs)
+    outputs, _ = model(inputs)
     return jnp.mean(
         optax.softmax_cross_entropy_with_integer_labels(outputs[:, :-1], inputs[:, 1:])
     )

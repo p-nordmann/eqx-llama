@@ -52,14 +52,14 @@ class LLaMA(eqx.Module):
         ]
 
     def embed(self, tokens):
-        return jax.vmap(self.embeddings)(tokens)
+        return jax.vmap(jax.vmap(self.embeddings))(tokens)
 
     def __call__(
         self,
-        tokens: Integer[Array, " seq_len"],
+        tokens: Integer[Array, " batch seq_len"],
         cache: KVCache | None = None,
         attn_implementation: Literal["cudnn", "regular"] = "regular",
-    ) -> tuple[Float[Array, " seq_len vocab_size"], KVCache | None]:
+    ) -> tuple[Float[Array, " batch seq_len vocab_size"], KVCache | None]:
         xs = self.embed(tokens)
 
         for layer in self.layers:

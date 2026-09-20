@@ -76,7 +76,7 @@ def init_weights(
 
 
 class KVCache(NamedTuple):
-    # [num_layers, max_seq_len, num_heads, head_dim]
+    # [num_layers, batch, max_seq_len, num_heads, head_dim]
     k: jax.Array
     v: jax.Array
 
@@ -86,11 +86,13 @@ class KVCache(NamedTuple):
 
 def init_kv_cache(
     config: LLaMAConfig,
+    batch: int,
     max_seq_len: int,
     dtype=jnp.bfloat16,
 ) -> KVCache:
     shape = (
         config.num_layers,
+        batch,
         max_seq_len,
         config.attention_num_heads,
         config.attention_head_dim,
@@ -117,13 +119,13 @@ def cache_write(
     new_k = jax.lax.dynamic_update_slice(
         cache.k,
         k[None],
-        (layer_idx, cache.position, 0, 0),
+        (layer_idx, 0, cache.position, 0, 0),
     )
 
     new_v = jax.lax.dynamic_update_slice(
         cache.v,
         v[None],
-        (layer_idx, cache.position, 0, 0),
+        (layer_idx, 0, cache.position, 0, 0),
     )
 
     return cache._replace(
