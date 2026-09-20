@@ -43,3 +43,4 @@ ignore = ["F722"]
 
 [project.optional-dependencies]
 cuda13 = ["jax[cuda13]>=0.11.2"]
+cuda12 = ["jax[cuda12]>=0.11.2"]
