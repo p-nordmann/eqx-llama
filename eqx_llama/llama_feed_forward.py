@@ -1,61 +1,81 @@
-import chex
+# eqx_llama/llama_feed_forward.py
+
 import equinox as eqx
 import jax
-from jaxtyping import Array, Float, PRNGKeyArray
+import jax.numpy as jnp
 
-from .utils import LLaMAConfig, RMSLayerNorm, init_weights
+from .config import LLaMAConfig, PrecisionPolicy
+from .utils import RMSNorm, init_weight, linear
 
 
 class FeedForwardModule(eqx.Module):
-    norm: RMSLayerNorm
-    weights_in_1: Array
-    weights_in_2: Array
-    weights_out: Array
+    norm: RMSNorm
 
-    layer_dim: int = eqx.field(static=True)
-    feed_forward_dim: int = eqx.field(static=True)
+    # FP32 masters.
+    w_gate_up: jax.Array
+    w_down: jax.Array
+
+    intermediate_dim: int = eqx.field(static=True)
 
     def __init__(
         self,
         config: LLaMAConfig,
         *,
-        key: PRNGKeyArray,
-        dtype: jax.typing.DTypeLike = "float32",
+        key: jax.Array,
     ):
-        k1, k2, k3, key = jax.random.split(key, 4)
+        k1, k2 = jax.random.split(key)
 
-        self.norm = RMSLayerNorm(config.layer_dim)
-        self.weights_in_1 = init_weights(
-            (config.layer_dim, config.feed_forward_dim), k1, dtype
-        )
-        self.weights_in_2 = init_weights(
-            (config.layer_dim, config.feed_forward_dim), k2, dtype
-        )
-        self.weights_out = init_weights(
-            (config.feed_forward_dim, config.layer_dim), k3, dtype
+        self.intermediate_dim = config.intermediate_dim
+
+        self.norm = RMSNorm(
+            config.hidden_dim,
+            config.rms_norm_eps,
         )
 
-        self.layer_dim = config.layer_dim
-        self.feed_forward_dim = config.feed_forward_dim
+        self.w_gate_up = init_weight(
+            k1,
+            (
+                config.hidden_dim,
+                2 * config.intermediate_dim,
+            ),
+            config.init_std,
+        )
+
+        self.w_down = init_weight(
+            k2,
+            (
+                config.intermediate_dim,
+                config.hidden_dim,
+            ),
+            config.init_std,
+        )
 
     def __call__(
-        self, xs: Float[Array, " seq_len layer_dim"]
-    ) -> Float[Array, " seq_len layer_dim"]:
-        seq_len = xs.shape[0]
-
-        xs_normalized = jax.vmap(self.norm)(xs)
-        hidden_1 = xs_normalized @ self.weights_in_1
-        hidden_2 = xs_normalized @ self.weights_in_2
-        hidden_after_swiglu = swiglu(hidden_1, hidden_2)
-        out = hidden_after_swiglu @ self.weights_out
-
-        chex.assert_shape([xs, xs_normalized, out], (seq_len, self.layer_dim))
-        chex.assert_shape(
-            [hidden_1, hidden_2, hidden_after_swiglu], (seq_len, self.feed_forward_dim)
+        self,
+        x: jax.Array,
+        policy: PrecisionPolicy,
+    ) -> jax.Array:
+        x = self.norm(
+            x,
+            policy.compute,
         )
 
-        return out
+        gate_up = linear(
+            x,
+            self.w_gate_up,
+            policy.compute,
+        )
 
+        gate, up = jnp.split(
+            gate_up,
+            2,
+            axis=-1,
+        )
 
-def swiglu(h1: Array, h2: Array) -> Array:
-    return jax.nn.silu(h1) * h2
+        hidden = jax.nn.silu(gate) * up
+
+        return linear(
+            hidden,
+            self.w_down,
+            policy.compute,
+        )
