@@ -68,7 +68,7 @@ class LLaMA(eqx.Module):
             xs = xs + layer.ffn(xs)
 
         if cache is not None:
-            cache = cache._replace(position=cache.position + tokens.shape[0])
+            cache = cache._replace(position=cache.position + tokens.shape[1])
 
         out = self.head(xs)
 

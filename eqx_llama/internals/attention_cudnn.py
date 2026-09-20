@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 
 
-def mha_cudnn(qs, ks, vs, sm_scale=1.0, causal=False):
+def mha_cudnn(qs, ks, vs, causal=False):
     """
     Inputs:
         qs: [B, Q, N, H]
@@ -23,7 +23,6 @@ def mha_cudnn(qs, ks, vs, sm_scale=1.0, causal=False):
         ks,
         vs,
         is_causal=causal,
-        scale=sm_scale,
         implementation="cudnn",
     )
 
