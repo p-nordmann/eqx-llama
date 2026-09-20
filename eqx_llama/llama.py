@@ -54,7 +54,7 @@ class LLaMA(eqx.Module):
         self,
         tokens: Integer[Array, " seq_len"],
         cache: KVCache | None = None,
-        attn_implementation: Literal["pallas", "regular"] = "regular",
+        attn_implementation: Literal["cudnn", "regular"] = "regular",
     ) -> tuple[Float[Array, " seq_len vocab_size"], KVCache | None]:
         xs = self.embed(tokens)
 
