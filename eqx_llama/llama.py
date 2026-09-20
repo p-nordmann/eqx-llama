@@ -4,9 +4,26 @@ import equinox as eqx
 import jax
 from jaxtyping import Array, Float, Integer, PRNGKeyArray
 
+from .llama_attention import AttentionModule
+from .llama_feed_forward import FeedForwardModule
 from .llama_head import LLaMAHead
-from .llama_layer import LLaMALayer
 from .utils import KVCache, LLaMAConfig
+
+
+class LLaMALayer(eqx.Module):
+    attn: AttentionModule
+    ffn: FeedForwardModule
+
+    def __init__(
+        self,
+        config: LLaMAConfig,
+        *,
+        key: PRNGKeyArray,
+        dtype: jax.typing.DTypeLike = "float32",
+    ):
+        k1, k2, key = jax.random.split(key, 3)
+        self.attn = AttentionModule(config, key=k1, dtype=dtype)
+        self.ffn = FeedForwardModule(config, key=k2, dtype=dtype)
 
 
 class LLaMA(eqx.Module):
@@ -30,17 +47,21 @@ class LLaMA(eqx.Module):
         key, *ks = jax.random.split(key, config.num_layers + 1)
         self.layers = [LLaMALayer(config, key=k, dtype=dtype) for k in ks]
 
+    def embed(self, tokens):
+        return jax.vmap(self.embeddings)(tokens)
+
     def __call__(
         self,
         tokens: Integer[Array, " seq_len"],
         cache: KVCache | None = None,
         attn_implementation: Literal["pallas", "regular"] = "regular",
     ) -> tuple[Float[Array, " seq_len vocab_size"], KVCache | None]:
-        xs = jax.vmap(self.embeddings)(tokens)
+        xs = self.embed(tokens)
 
         for layer in self.layers:
-            xs, cache = layer(xs, cache, attn_implementation=attn_implementation)
+            xs = xs + layer.attn(xs, cache, attn_implementation)
+            xs = xs + layer.ffn(xs)
 
-        out = jax.vmap(self.head, in_axes=(0))(xs)
+        out = self.head(xs)
 
         return out, cache
