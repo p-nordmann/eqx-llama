@@ -1,7 +1,6 @@
 import math
 from typing import Literal
 
-import chex
 import equinox as eqx
 import jax
 import jax.numpy as jnp
@@ -13,25 +12,9 @@ from .utils import (
     LLaMAConfig,
     RMSLayerNorm,
     apply_rotary_embeddings,
+    cache_write,
     init_weights,
-    safe_concat,
 )
-
-# TODO make sure to pad inputs to pallas attention to the nearest power of 2
-
-
-def cache_get(cache: KVCache | None, cache_key: str):
-    if cache is None:
-        return None, None, 0
-    ks, vs = cache.get(cache_key)
-    context_len = ks.shape[0] if ks is not None else 0
-    return ks, vs, context_len
-
-
-def cache_set(cache: KVCache | None, cache_key: str, ks: Array, vs: Array):
-    if cache is None:
-        return None
-    return cache.set(cache_key, ks, vs)
 
 
 class _AttentionWeights(eqx.Module):
@@ -55,12 +38,13 @@ class AttentionModule(eqx.Module):
     num_heads: int = eqx.field(static=True)
     head_dim: int = eqx.field(static=True)
 
-    cache_key: str = eqx.field(static=True)
+    layer_idx: int = eqx.field(static=True)
 
     def __init__(
         self,
         config: LLaMAConfig,
         *,
+        layer_idx: int,
         key: PRNGKeyArray,
         dtype: jax.typing.DTypeLike = "float32",
     ):
@@ -81,7 +65,7 @@ class AttentionModule(eqx.Module):
             init_weights((config.layer_dim, self.num_heads, self.head_dim), k4, dtype),
         )
 
-        self.cache_key = str(id(self))
+        self.layer_idx = layer_idx
 
     def _compute_embeddings(
         self,
@@ -108,24 +92,70 @@ class AttentionModule(eqx.Module):
     ) -> Float[Array, "seq_len layer_dim"]:
         seq_len = xs.shape[0]
 
-        old_ks, old_vs, context_len = cache_get(cache, self.cache_key)
-        new_qs, new_ks, new_vs = self._compute_embeddings(self.norm(xs), context_len)
-        ks, vs = safe_concat(old_ks, new_ks), safe_concat(old_vs, new_vs)
-        cache_set(cache, self.cache_key, ks, vs)
+        # -----------------------------
+        # Normal training path
+        # -----------------------------
+        if cache is None:
+            qs, ks, vs = self._compute_embeddings(
+                self.norm(xs),
+                start_index=0,
+            )
+            attn_out = compute_self_attention_padded(
+                qs,
+                ks,
+                vs,
+                attn_implementation,
+            )
 
-        attn_out = compute_self_attention_padded(new_qs, ks, vs, attn_implementation)
+        # -----------------------------
+        # Cached inference
+        # -----------------------------
+        else:
+            start = cache.position
+
+            qs, new_ks, new_vs = self._compute_embeddings(
+                self.norm(xs),
+                start_index=start,
+            )
+
+            cache = cache_write(
+                cache,
+                self.layer_idx,
+                new_ks,
+                new_vs,
+            )
+
+            if seq_len == 1:
+                # Decode.
+                #
+                # Physical K/V length stays max_seq_len.
+                # Logical length tells cuDNN which part is real.
+                kv_len = cache.position + 1
+
+                attn_out = cached_decode_attention(
+                    qs,
+                    cache.k[self.layer_idx],
+                    cache.v[self.layer_idx],
+                    kv_len,
+                )
+
+            else:
+                # Initial prompt prefill.
+                #
+                # Don't make attention look at the fixed-size cache at all.
+                # We already have exactly the K/V we need here.
+                #
+                # Deliberately only supporting one-shot prefill for now.
+                attn_out = compute_self_attention_padded(
+                    qs,
+                    new_ks,
+                    new_vs,
+                    attn_implementation,
+                )
+
         out = jnp.einsum("snh,dnh->sd", attn_out, self.weights.wo)
 
-        if old_ks is not None:
-            chex.assert_shape(
-                [old_ks, old_vs], (context_len, self.num_heads, self.head_dim)
-            )
-        chex.assert_shape(
-            [new_qs, new_ks, new_vs], (seq_len, self.num_heads, self.head_dim)
-        )
-        chex.assert_shape([xs, out], (seq_len, self.layer_dim))
-
-        return out
+        return out, cache
 
 
 def _next_pow2(n: int) -> int:
@@ -185,3 +215,36 @@ def compute_self_attention(
         )[0, ...]
 
     raise ValueError(f"Unexpected attention implementation '{attn_implementation}'")
+
+
+def cached_decode_attention(
+    qs,  # [1, heads, dim]
+    ks,  # [capacity, heads, dim]
+    vs,
+    kv_len,  # scalar
+):
+    output_dtype = qs.dtype
+
+    # cuDNN SDPA wants FP16/BF16.
+    qs = qs.astype(jnp.bfloat16)
+    ks = ks.astype(jnp.bfloat16)
+    vs = vs.astype(jnp.bfloat16)
+
+    out = jax.nn.dot_product_attention(
+        qs[None],
+        ks[None],
+        vs[None],
+        # q_len == 1, so all valid keys are causal.
+        is_causal=False,
+        query_seq_lengths=jnp.ones(
+            (1,),
+            dtype=jnp.int32,
+        ),
+        key_value_seq_lengths=jnp.reshape(
+            kv_len,
+            (1,),
+        ).astype(jnp.int32),
+        implementation="cudnn",
+    )
+
+    return out[0].astype(output_dtype)

@@ -1,9 +1,8 @@
-from typing import Dict, NamedTuple, Optional, Tuple, TypeAlias
+from typing import NamedTuple
 
 import equinox as eqx
 import jax
 import jax.numpy as jnp
-import jax.tree_util as jtu
 from jaxtyping import Array, Float, PRNGKeyArray
 
 
@@ -64,46 +63,6 @@ def apply_rotary_embeddings(
     return xs_rotated
 
 
-LayerKVCache: TypeAlias = Tuple[Optional[jax.Array], Optional[jax.Array]]
-KVCacheDict: TypeAlias = Dict[str, LayerKVCache]
-
-
-@jtu.register_pytree_node_class
-class KVCache:
-    _state: KVCacheDict
-
-    def __init__(self, initial_state: Optional[KVCacheDict] = None):
-        self._state = initial_state if initial_state is not None else {}
-
-    def get(self, layer_key: str) -> LayerKVCache:
-        """Gets the cache tuple (k, v) for a layer, returning (None, None) if absent."""
-        return self._state.get(layer_key, (None, None))
-
-    def set(self, layer_key: str, ks: jax.Array, vs: jax.Array) -> None:
-        """Updates the cache."""
-        self._state |= {layer_key: (ks, vs)}
-
-    def tree_flatten(self):
-        children = list(self._state.values())
-        aux_data = list(self._state.keys())
-        return children, aux_data
-
-    @classmethod
-    def tree_unflatten(cls, aux_data, children):
-        keys = aux_data
-        state_dict = dict(zip(keys, children))
-        return cls(state_dict)
-
-    def __repr__(self):
-        count = len(self._state)
-        layer_reprs = []
-        for layer_key, (ks, vs) in self._state.items():
-            ks_shape = ks.shape if ks is not None else None
-            layer_reprs.append(f"L{str(layer_key)[-4:]}:(k={ks_shape})")
-        layers_str = ", ".join(layer_reprs)
-        return f"KVCache(count={count}, layers=[{layers_str}])"
-
-
 def init_weights(
     shape: tuple[int, ...],
     key: PRNGKeyArray,
@@ -116,7 +75,58 @@ def init_weights(
     )
 
 
-def safe_concat(left: Array | None, right: Array) -> Array:
-    if left is None:
-        return right
-    return jnp.concat([left, right], axis=0)
+class KVCache(NamedTuple):
+    # [num_layers, max_seq_len, num_heads, head_dim]
+    k: jax.Array
+    v: jax.Array
+
+    # Number of tokens currently stored.
+    position: jax.Array
+
+
+def init_kv_cache(
+    config: LLaMAConfig,
+    max_seq_len: int,
+    dtype=jnp.bfloat16,
+) -> KVCache:
+    shape = (
+        config.num_layers,
+        max_seq_len,
+        config.attention_num_heads,
+        config.attention_head_dim,
+    )
+
+    return KVCache(
+        k=jnp.zeros(shape, dtype=dtype),
+        v=jnp.zeros(shape, dtype=dtype),
+        position=jnp.array(0, dtype=jnp.int32),
+    )
+
+
+def cache_write(
+    cache: KVCache,
+    layer_idx: int,
+    k: jax.Array,  # [seq_len, heads, head_dim]
+    v: jax.Array,
+) -> KVCache:
+    # Cast once when storing. For cuDNN we want a BF16 cache.
+    k = k.astype(cache.k.dtype)
+    v = v.astype(cache.v.dtype)
+
+    # Update stays fixed-shape. No concat, no reallocation-by-length.
+    new_k = jax.lax.dynamic_update_slice(
+        cache.k,
+        k[None],
+        (layer_idx, cache.position, 0, 0),
+    )
+
+    new_v = jax.lax.dynamic_update_slice(
+        cache.v,
+        v[None],
+        (layer_idx, cache.position, 0, 0),
+    )
+
+    return cache._replace(
+        k=new_k,
+        v=new_v,
+    )

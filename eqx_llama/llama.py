@@ -18,11 +18,12 @@ class LLaMALayer(eqx.Module):
         self,
         config: LLaMAConfig,
         *,
+        layer_idx: int,
         key: PRNGKeyArray,
         dtype: jax.typing.DTypeLike = "float32",
     ):
         k1, k2, key = jax.random.split(key, 3)
-        self.attn = AttentionModule(config, key=k1, dtype=dtype)
+        self.attn = AttentionModule(config, layer_idx=layer_idx, key=k1, dtype=dtype)
         self.ffn = FeedForwardModule(config, key=k2, dtype=dtype)
 
 
@@ -45,7 +46,10 @@ class LLaMA(eqx.Module):
         self.head = LLaMAHead(config, key=k2, dtype=dtype)
 
         key, *ks = jax.random.split(key, config.num_layers + 1)
-        self.layers = [LLaMALayer(config, key=k, dtype=dtype) for k in ks]
+        self.layers = [
+            LLaMALayer(config, layer_idx=i, key=k, dtype=dtype)
+            for i, k in enumerate(ks)
+        ]
 
     def embed(self, tokens):
         return jax.vmap(self.embeddings)(tokens)
@@ -59,8 +63,12 @@ class LLaMA(eqx.Module):
         xs = self.embed(tokens)
 
         for layer in self.layers:
-            xs = xs + layer.attn(xs, cache, attn_implementation)
+            attn_out, cache = layer.attn(xs, cache, attn_implementation)
+            xs = xs + attn_out
             xs = xs + layer.ffn(xs)
+
+        if cache is not None:
+            cache = cache._replace(position=cache.position + tokens.shape[0])
 
         out = self.head(xs)
 
